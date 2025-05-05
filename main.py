@@ -1,9 +1,13 @@
-# main.py (Updated for UI Integration)
+# main.py (Updated for EventBus UI Integration)
 
 import time
-import queue
+# import queue # No longer needed
+import logging # Use logging module
+
 from core.telemetry_manager import TelemetryManager
-from ui.simple_display import SimpleDisplay # Import the UI class
+from ui.simple_display import SimpleDisplay
+# Import the global event bus instance and Events class
+from utils.event_bus import event_bus, Events
 
 # --- Configuration ---
 CONNECTION_STRING = '/dev/tty.usbmodem101' # Mac serial
@@ -11,74 +15,83 @@ CONNECTION_STRING = '/dev/tty.usbmodem101' # Mac serial
 # CONNECTION_STRING = 'udp:localhost:14550' # SITL UDP
 BAUD_RATE = 115200
 
-# How often to check the queue for updates (milliseconds)
-QUEUE_CHECK_INTERVAL_MS = 100
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
 
-# --- Global variable for the app instance ---
-# This is simpler than passing it around explicitly for the after() loop
-app = None
-
-def process_queue():
-    """Processes messages from the telemetry queue and updates the UI."""
-    global app # Need to access the global app instance
-    if not app:
-        print("ERROR: App not initialized in process_queue")
-        return
-
-    manager = app.telemetry_manager # Get manager from app
-    if not manager:
-        print("ERROR: Telemetry Manager not found in app")
-        return
-
-    data_queue = manager.get_data_queue()
-    processed_count = 0
-    max_batch = 20 # Process up to 20 messages per cycle to avoid freezing UI
-
-    try:
-        while processed_count < max_batch:
-            data_update = data_queue.get_nowait()
-            # print(f"UI Processing: {data_update}") # Debug print
-            app.update_telemetry(data_update) # Call the UI update method
-            processed_count += 1
-    except queue.Empty:
-        # No more messages in the queue for now
-        pass
-    except Exception as e:
-         print(f"Error processing queue: {type(e).__name__}: {e}")
-    finally:
-        # Schedule the next check
-        app.after(QUEUE_CHECK_INTERVAL_MS, process_queue)
-
+# --- Remove process_queue function ---
+# def process_queue(): ... # REMOVED
 
 def main():
-    global app # Declare app as global to assign the instance
+    # No longer need global app variable here
 
-    print("Initializing Telemetry Manager...")
-    # Note: We don't pass the queue here, manager creates its own
-    telemetry_manager = TelemetryManager(CONNECTION_STRING, baud=BAUD_RATE)
+    logging.info("Initializing Telemetry Manager...")
+    # Pass the global event_bus instance to the manager
+    telemetry_manager = TelemetryManager(CONNECTION_STRING, baud=BAUD_RATE, bus=event_bus)
 
-    print("Initializing UI...")
-    # Pass the manager instance to the UI for shutdown handling
-    app = SimpleDisplay(telemetry_manager)
+    logging.info("Initializing UI...")
+    # UI no longer needs manager directly
+    app = SimpleDisplay()
 
+    # --- IMPORTANT: Give the EventBus a reference to the Tk app ---
+    # This allows it to schedule UI updates correctly using app.after()
+    event_bus.set_tk_app(app)
+
+    # --- Subscribe UI handlers to events ---
+    event_bus.subscribe(Events.TELEMETRY_UPDATE, app.handle_telemetry_update)
+    event_bus.subscribe(Events.CONNECTION_STATUS_CHANGED, app.handle_connection_status_change)
+    event_bus.subscribe(Events.STATUS_TEXT_RECEIVED, app.handle_status_text)
+    logging.info("UI event handlers subscribed.")
+
+    # --- Main Execution ---
     try:
-        print("Starting Telemetry Manager...")
-        if telemetry_manager.start(): # Start the manager
-             print("Telemetry receiving thread started.")
-             # Schedule the first call to process the queue after UI is ready
-             app.after(QUEUE_CHECK_INTERVAL_MS, process_queue)
-             print("Starting UI main loop...")
-             app.mainloop() # Start the Tkinter event loop (blocks until window closed)
+        logging.info("Starting Telemetry Manager...")
+        if telemetry_manager.start(): # Start the manager thread
+             logging.info("Telemetry receiving thread started.")
+             # NO queue processing needed - EventBus handles callbacks
+             logging.info("Starting UI main loop...")
+             app.mainloop() # Start Tkinter event loop (blocks here)
+             # --- Code below mainloop() only executes after window is closed ---
+             logging.info("UI main loop finished.")
         else:
-             print("FATAL: Failed to start Telemetry Manager. Exiting.")
-             app.destroy() # Close the (potentially empty) window
+             logging.error("FATAL: Failed to start Telemetry Manager. Exiting.")
+             # Ensure window closes if manager fails to start
+             try:
+                 app.destroy()
+             except tk.TclError: # Catch error if window already destroyed
+                 pass
+
     except Exception as e:
-        print(f"Unhandled exception occurred: {type(e).__name__}: {e}")
+         logging.critical(f"Unhandled exception in main: {e}", exc_info=True)
+    finally:
+        # --- Graceful Shutdown ---
+        # This block executes when mainloop exits (window closed) or on error
+        logging.info("Initiating shutdown sequence...")
 
-    # No 'finally' block needed here for manager.stop(),
-    # because app.on_closing() handles calling manager.stop() when the window is closed.
+        # Unsubscribe handlers (optional but good practice)
+        try:
+            event_bus.unsubscribe(Events.TELEMETRY_UPDATE, app.handle_telemetry_update)
+            event_bus.unsubscribe(Events.CONNECTION_STATUS_CHANGED, app.handle_connection_status_change)
+            event_bus.unsubscribe(Events.STATUS_TEXT_RECEIVED, app.handle_status_text)
+            logging.info("UI Event handlers unsubscribed.")
+        except Exception as ue:
+             logging.error(f"Error unsubscribing handlers: {ue}")
 
-    print("Application finished.")
+        # Stop the telemetry manager thread
+        # Check if it exists and needs stopping (might have failed to start)
+        if hasattr(telemetry_manager, 'stop') and callable(telemetry_manager.stop):
+             telemetry_manager.stop()
+        else:
+             logging.warning("Telemetry manager instance not available for stopping.")
+
+        # Ensure window is closed if not already
+        # try:
+        #    if app.winfo_exists():
+        #        app.destroy()
+        # except Exception as de:
+        #     logging.error(f"Error destroying app window: {de}")
+
+
+    logging.info("Application finished.")
 
 
 if __name__ == "__main__":
