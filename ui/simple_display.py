@@ -2,10 +2,12 @@
 
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox # For showing errors
 import time # Keep for timestamp formatting
+import serial.tools.list_ports # To list available serial ports
 
-# Import Events, but not the bus instance directly (UI shouldn't know about globals ideally)
-from utils.event_bus import Events
+# Import Events and the bus instance
+from utils.event_bus import Events, event_bus
 
 class SimpleDisplay(tk.Tk):
     # Remove telemetry_manager from __init__
@@ -14,10 +16,16 @@ class SimpleDisplay(tk.Tk):
         super().__init__()
         # self.telemetry_manager = telemetry_manager # REMOVED
 
+        # --- Window Configuration ---
         self.title("ArduPilot GCS - Basic Telemetry")
-        self.geometry("450x450") # Increased height slightly for status
-
+        self.geometry("550x500") # Increased width/height for better layout
+        # Store references to widgets we need to enable/disable
+        self.conn_widgets = {}
         # --- Data Variables ---
+        # Connection Settings
+        self.connection_string_var = tk.StringVar(value='udp:localhost:14550') # Default value
+        self.baud_rate_var = tk.StringVar(value='115200') # Default baud
+
         self.mode_var = tk.StringVar(value="Mode: ---")
         self.arm_var = tk.StringVar(value="Armed: ---")
         # ... (other telemetry StringVars remain the same) ...
@@ -43,14 +51,48 @@ class SimpleDisplay(tk.Tk):
         self.last_status_text_var = tk.StringVar(value="Vehicle Msg: ---")
         self.last_msg_type_var = tk.StringVar(value="Last Msg Type: None") # Renamed slightly
 
-        # --- UI Layout ---
+       # --- Setup UI ---
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Creates and arranges the UI elements."""
         main_frame = ttk.Frame(self, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
+        main_frame.columnconfigure(1, weight=1) # 2 columns for telemetry
+        main_frame.columnconfigure(2, weight=0) # 1 column for connection panel
 
+        # --- Connection Panel (Right Side) ---
+        conn_frame = ttk.LabelFrame(main_frame, text="Connection", padding="10")
+        conn_frame.grid(row=0, column=2, rowspan=5, sticky="nsew", padx=(10, 5), pady=5)
+
+        ttk.Label(conn_frame, text="Port/Address:").grid(row=0, column=0, sticky="w", pady=2)
+        # Try to get serial ports for Combobox
+        try:
+             ports = [p.device for p in serial.tools.list_ports.comports()]
+             # Add common UDP addresses
+             ports.extend(['udp:localhost:14550', 'udp:192.168.1.100:14550']) # Example
+        except Exception as e:
+             print(f"Warning: Could not list serial ports - {e}")
+             ports = ['udp:localhost:14550', '/dev/ttyACM0', 'COM3'] # Fallback
+
+        self.conn_widgets['port_combo'] = ttk.Combobox(conn_frame, textvariable=self.connection_string_var, values=ports, width=25)
+        self.conn_widgets['port_combo'].grid(row=1, column=0, sticky="ew", pady=2)
+
+        ttk.Label(conn_frame, text="Baud Rate:").grid(row=2, column=0, sticky="w", pady=2)
+        self.conn_widgets['baud_entry'] = ttk.Entry(conn_frame, textvariable=self.baud_rate_var, width=10)
+        self.conn_widgets['baud_entry'].grid(row=3, column=0, sticky="w", pady=2)
+
+        self.conn_widgets['connect_btn'] = ttk.Button(conn_frame, text="Connect", command=self.request_connect)
+        self.conn_widgets['connect_btn'].grid(row=4, column=0, sticky="ew", pady=(10, 2))
+
+        self.conn_widgets['disconnect_btn'] = ttk.Button(conn_frame, text="Disconnect", command=self.request_disconnect, state=tk.DISABLED) # Disabled initially
+        self.conn_widgets['disconnect_btn'].grid(row=5, column=0, sticky="ew", pady=2)
+
+        # --- Telemetry Display (Left/Middle) ---
         # Top Status Bar
         top_status_frame = ttk.Frame(main_frame)
+        # Span first two columns, leave conn panel separate
         top_status_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 5))
         ttk.Label(top_status_frame, textvariable=self.connection_status_var, font="-weight bold").pack(side=tk.LEFT, padx=5)
         ttk.Label(top_status_frame, textvariable=self.last_msg_type_var).pack(side=tk.RIGHT, padx=5)
@@ -64,7 +106,6 @@ class SimpleDisplay(tk.Tk):
         # Position Section
         pos_frame = ttk.LabelFrame(main_frame, text="Position & Altitude", padding="5")
         pos_frame.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
-        # ... (Labels for lat, lon, alt remain the same) ...
         ttk.Label(pos_frame, textvariable=self.lat_var).pack(anchor="w")
         ttk.Label(pos_frame, textvariable=self.lon_var).pack(anchor="w")
         ttk.Label(pos_frame, textvariable=self.alt_agl_var).pack(anchor="w")
@@ -73,7 +114,6 @@ class SimpleDisplay(tk.Tk):
         # Attitude Section
         att_frame = ttk.LabelFrame(main_frame, text="Attitude", padding="5")
         att_frame.grid(row=2, column=1, sticky="nsew", padx=5, pady=5)
-        # ... (Labels for roll, pitch, yaw, heading remain the same) ...
         ttk.Label(att_frame, textvariable=self.roll_var).pack(anchor="w")
         ttk.Label(att_frame, textvariable=self.pitch_var).pack(anchor="w")
         ttk.Label(att_frame, textvariable=self.yaw_var).pack(anchor="w")
@@ -82,7 +122,6 @@ class SimpleDisplay(tk.Tk):
         # Speed Section
         spd_frame = ttk.LabelFrame(main_frame, text="Speed & Climb", padding="5")
         spd_frame.grid(row=3, column=0, sticky="nsew", padx=5, pady=5)
-        # ... (Labels for airspeed, groundspeed, climb remain the same) ...
         ttk.Label(spd_frame, textvariable=self.airspeed_var).pack(anchor="w")
         ttk.Label(spd_frame, textvariable=self.groundspeed_var).pack(anchor="w")
         ttk.Label(spd_frame, textvariable=self.climb_rate_var).pack(anchor="w")
@@ -90,7 +129,6 @@ class SimpleDisplay(tk.Tk):
         # GPS & Battery Section
         sens_frame = ttk.LabelFrame(main_frame, text="GPS & Battery", padding="5")
         sens_frame.grid(row=3, column=1, sticky="nsew", padx=5, pady=5)
-        # ... (Labels for gps, battery remain the same) ...
         ttk.Label(sens_frame, textvariable=self.gps_fix_var).pack(anchor="w")
         ttk.Label(sens_frame, textvariable=self.gps_sats_var).pack(anchor="w")
         ttk.Separator(sens_frame, orient='horizontal').pack(fill='x', pady=5)
@@ -98,17 +136,46 @@ class SimpleDisplay(tk.Tk):
         ttk.Label(sens_frame, textvariable=self.batt_curr_var).pack(anchor="w")
         ttk.Label(sens_frame, textvariable=self.batt_rem_var).pack(anchor="w")
 
-
         # Last Status Text Message
-        last_text_frame = ttk.Frame(main_frame, padding="5")
+        last_text_frame = ttk.Frame(main_frame)
         last_text_frame.grid(row=4, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
-        ttk.Label(last_text_frame, textvariable=self.last_status_text_var, wraplength=400, justify=tk.LEFT).pack(anchor="w")
+        ttk.Label(last_text_frame, textvariable=self.last_status_text_var, wraplength=400, justify=tk.LEFT).pack(anchor="w", fill=tk.X)
 
-        # --- Graceful Shutdown ---
-        # self.protocol("WM_DELETE_WINDOW", self.on_closing)
-        # Let main loop handle shutdown on window close now
+    # --- Button Callbacks ---
 
-    # Removed on_closing method - main loop's finally block handles shutdown
+    def request_connect(self):
+        """Publishes a CONNECT_REQUEST event."""
+        conn_str = self.connection_string_var.get()
+        baud_str = self.baud_rate_var.get()
+
+        if not conn_str:
+            messagebox.showerror("Connection Error", "Please enter a connection port/address.")
+            return
+
+        try:
+            baud = int(baud_str)
+        except ValueError:
+             messagebox.showerror("Connection Error", "Please enter a valid integer baud rate.")
+             return
+
+        # Publish event using the global event_bus instance
+        event_bus.publish_safe(
+            Events.CONNECTION_REQUEST,
+            conn_string=conn_str,
+            baud=baud
+        )
+        # Update UI state immediately to show 'Connecting' and disable button
+        self.handle_connection_status_change("CONNECTING", "Request sent...")
+
+
+    def request_disconnect(self):
+        """Publishes a DISCONNECT_REQUEST event."""
+        # Publish event using the global event_bus instance
+        event_bus.publish_safe(Events.DISCONNECT_REQUEST)
+        # Update UI state immediately
+        self.handle_connection_status_change("DISCONNECTING", "Request sent...")
+
+
 
     # --- Event Handlers ---
 
@@ -159,12 +226,33 @@ class SimpleDisplay(tk.Tk):
         # Add elif for RC_CHANNELS if needed
 
     def handle_connection_status_change(self, status, message=""):
-        """EVENT HANDLER: Updates the connection status label."""
+        """EVENT HANDLER: Updates status label and enables/disables widgets."""
         display_message = f"Status: {status}"
         if message:
+            # Shorten long error messages for display
+            if len(message) > 50:
+                 message = message[:47] + "..."
             display_message += f" ({message})"
         self.connection_status_var.set(display_message)
-        # You could change label color here too based on status
+
+        # Enable/Disable widgets based on status
+        if status == "CONNECTED":
+            self.conn_widgets['connect_btn'].config(state=tk.DISABLED)
+            self.conn_widgets['disconnect_btn'].config(state=tk.NORMAL)
+            self.conn_widgets['port_combo'].config(state=tk.DISABLED)
+            self.conn_widgets['baud_entry'].config(state=tk.DISABLED)
+        elif status == "DISCONNECTED" or status == "ERROR":
+            self.conn_widgets['connect_btn'].config(state=tk.NORMAL)
+            self.conn_widgets['disconnect_btn'].config(state=tk.DISABLED)
+            self.conn_widgets['port_combo'].config(state=tk.NORMAL)
+            self.conn_widgets['baud_entry'].config(state=tk.NORMAL)
+        elif status == "CONNECTING" or status == "DISCONNECTING":
+            self.conn_widgets['connect_btn'].config(state=tk.DISABLED)
+            self.conn_widgets['disconnect_btn'].config(state=tk.DISABLED)
+            self.conn_widgets['port_combo'].config(state=tk.DISABLED)
+            self.conn_widgets['baud_entry'].config(state=tk.DISABLED)
+
+ 
 
     def handle_status_text(self, text, severity, **kwargs): # Use **kwargs to ignore extra fields like timestamp
         """EVENT HANDLER: Updates the last status text message label."""

@@ -1,106 +1,141 @@
-# Technical Documentation: ArduPilot Ground Control Station (GCS) Basic
+# ArduPilot Ground Control Station (GCS) Basic
 
 ## Overview
 
-This is a lightweight Ground Control Station (GCS) application designed to interface with ArduPilot autopilots. The application provides real-time telemetry visualization and basic vehicle control capabilities through a simple Tkinter-based GUI.
+This is a lightweight Ground Control Station (GCS) application designed to interface with ArduPilot autopilots. It provides real-time telemetry visualization and basic vehicle status monitoring through a Tkinter-based GUI, using an event-driven architecture for robust, thread-safe operation.
 
-## Architecture
+---
 
-The application follows an event-driven architecture using a publish-subscribe pattern, with the following main components:
+## Project Structure
 
-### 1. Core Components
+- `main.py`: Application entry point. Initializes telemetry, UI, and connects components via the EventBus.
+- `core/telemetry_manager.py` : Handles MAVLink connection, telemetry parsing, and event publishing.
+- `core/vehicle_data.py` : (If used) Data structures for vehicle state.
+- `ui/simple_display.py`: Tkinter-based GUI for displaying vehicle telemetry and status.
+- `utils/event_bus.py`: Thread-safe publish/subscribe event bus for decoupled communication.
+- `utils/constants.py`: (If used) Shared constants.
+-  `tests/` : Contains all automated test files for core, UI, and utils modules.
+    - `tests/utils/test_event_bus.py`: Unit tests for the event bus, including subscribing, unsubscribing, publishing, and error handling.
+    - `tests/core/, tests/ui/`: (Currently contain `**init**.py` for package structure; add tests here as needed.)
 
-- **main.py**: The entry point that initializes the system and manages the main event loop
-- **core/telemetry_manager.py**: Handles MAVLink communication and telemetry processing
-- **ui/simple_display.py**: Tkinter-based GUI for displaying telemetry data
-- **utils/event_bus.py**: Implements the event bus for inter-component communication
+---
 
-### 2. Key Features Implemented
+## How It Works
 
-- **MAVLink Protocol Support**: Communicates with ArduPilot using pymavlink
-- **Real-time Telemetry Display**: Shows various vehicle parameters including:
-    - Position (Latitude, Longitude, Altitude)
-    - Attitude (Roll, Pitch, Yaw)
-    - GPS Status
-    - Battery Information
-    - Vehicle Status (Arming state, Mode)
-- **Event-Driven Architecture**: Uses a custom event bus for loose coupling between components
-- **Thread-Safe Operations**: Implements proper thread synchronization for GUI updates
+1. **TelemetryManager** connects to the vehicle using MAVLink and listens for telemetry.
+2. On receiving data, it publishes events (like `TELEMETRY_UPDATE` or `CONNECTION_STATUS_CHANGED`) via the **EventBus**.
+3. The UI (**SimpleDisplay**) subscribes to these events and updates the display in real time.
+4. The event-driven architecture ensures loose coupling and thread safety between data acquisition and the user interface.
 
-### 3. Technical Implementation Details
+---
 
-- **Event Bus**: Centralized communication system that allows components to communicate without direct dependencies
-- **Threading**: Uses Python's threading module for concurrent operations (telemetry processing and UI updates)
-- **Logging**: Comprehensive logging for debugging and monitoring
+## Features
+
+- **MAVLink Protocol Support**: Communicates with ArduPilot using pymavlink.
+- **Real-time Telemetry Display**: Shows position, attitude, GPS, battery, and vehicle status.
+- **Event-Driven Architecture**: Uses a custom event bus for loose coupling between components.
+- **Thread-Safe Operations**: Proper thread synchronization for GUI updates.
+- **Comprehensive Logging**: For debugging and monitoring.
+- **Connection Selection via UI**: Users can select the serial/UDP connection string and baud rate directly from the graphical interface—no code editing required.
+- **Automated Tests**: Test suite using pytest for core event bus functionality and structure for future test expansion.
+
+---
+
+## Getting Started
+
+1. **Install dependencies:**
+    
+```bash
+pip install pymavlink pytest
+```
+    
+2. **(Optional) Create and activate a virtual environment:**
+		```
+```bash
+python -m venv .venv 
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```    
+3. **Connect your autopilot and run:**
+    
+    ```bash
+python main.py
+    ```
+    
+4. **Select your connection and baud rate in the UI, then connect.**
+
+---
+
+## Running Tests
+
+To run the automated test suite (requires pytest):
+
+
+```bash
+pytest tests/
+```
+
+This will execute all available unit tests, currently focusing on the event bus logic. Expand the test suite for other modules as your project grows.
+
+---
+
+## Dependencies
+
+- Python 3.x
+- pymavlink
+- tkinter (usually included with Python)
+- pytest (for running tests)
+- Standard Python libraries (`threading, queue, logging, etc.`)
+
+---
 
 ## Current Status
-
-The application currently provides:
 
 - Basic telemetry visualization
 - Connection management
 - Status message display
 - Thread-safe UI updates
 - Event-based architecture for extensibility
+- Automated tests for event bus
+
+---
 
 ## Future Enhancements
 
-### 1. Core Functionality
+### Core Functionality
 
-- [ ] Add support for waypoint mission planning and management
-- [ ] Implement parameter configuration interface
-- [ ] Add support for multiple vehicle connections
-- [ ] Implement data logging functionality
+- [ ] Waypoint mission planning and management
+- [ ] Parameter configuration interface
+- [ ] Multiple vehicle connections
+- [ ] Data logging
 
-### 2. User Interface
+### User Interface
 
-- [ ] Add a map view for vehicle position visualization
-- [ ] Implement customizable dashboard layouts
-- [ ] Add support for different themes
-- [ ] Implement a more sophisticated status panel with historical data
+- [ ] Map view for vehicle position visualization
+- [ ] Customizable dashboard layouts
+- [ ] UI themes
+- [ ] Advanced status/history panel
 
-### 3. Advanced Features
+### Advanced Features
 
-- [ ] Add support for geofencing
-- [ ] Implement failsafe configuration
-- [ ] Add support for camera controls
-- [ ] Implement video streaming capabilities
+- [ ] Geofencing support
+- [ ] Failsafe configuration
+- [ ] Camera controls
+- [ ] Video streaming
 
-### 4. Code Quality & Maintenance
+### Code Quality & Maintenance
 
-- [ ] Add comprehensive unit tests
-- [ ] Implement CI/CD pipeline
-- [ ] Add API documentation
-- [ ] Improve error handling and recovery
+- [ ] Expand test coverage to core and UI modules
+- [ ] CI/CD pipeline
+- [ ] API documentation
+- [ ] Improved error handling
 
-### 5. Performance
+### Performance
 
-- [ ] Optimize telemetry data processing
-- [ ] Implement data compression for reduced bandwidth usage
-- [ ] Add support for different telemetry update rates
+- [ ] Telemetry data processing optimizations
+- [ ] Data compression for bandwidth
+- [ ] Configurable telemetry update rates
 
-## Dependencies
-
-- Python 3.x
-- pymavlink
-- tkinter
-- Standard Python libraries (threading, queue, logging, etc.)
-
-## Getting Started
-
-1. Install dependencies: 
-    
-    ```
-    pip install pymavlink
-    ```
-    
-2. Connect your autopilot
-3. Run: 
-    
-    ```
-    python main.py
-    ```
-    
+---
 
 ## Known Issues
 
@@ -108,4 +143,8 @@ The application currently provides:
 - Basic UI with limited customization options
 - No data persistence for telemetry logs
 
-This documentation provides a comprehensive overview of the current implementation and outlines potential directions for future development. The event-driven architecture provides a solid foundation for extending functionality while maintaining good separation of concerns.
+---
+
+## Contributions
+
+Contributions, bug reports, and suggestions are welcome! Please open an issue or submit a pull request.

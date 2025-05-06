@@ -12,6 +12,8 @@ class Events:
 
     # Connection related
     CONNECTION_REQUEST = "connection_request" # Data: dict {'conn_string': str, 'baud': int}
+    DISCONNECT_REQUEST = "disconnect_request" # Data: None #<-- ADD
+
     CONNECTION_STATUS_CHANGED = "connection_status_changed" # Data: dict {'status': str, 'message': str}
                                                             # e.g. status='CONNECTING'/'CONNECTED'/'DISCONNECTED'/'ERROR'
 

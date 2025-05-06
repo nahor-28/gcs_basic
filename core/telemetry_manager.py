@@ -1,4 +1,4 @@
-# core/telemetry_manager.py (Integrate EventBus)
+# core/telemetry_manager.py (Handle Connection Events)
 
 import threading
 import time
@@ -12,12 +12,12 @@ import logging # Use logging
 from utils.event_bus import event_bus, Events
 
 class TelemetryManager:
-    def __init__(self, connection_string, baud=115200, bus=event_bus): # Accept bus instance
+    def __init__(self, initial_conn_string, initial_baud=115200, bus=event_bus): # Accept bus instance
         """
         Initializes the TelemetryManager using an EventBus.
         """
-        self.connection_string = connection_string
-        self.baud = baud
+        self._connection_string = initial_conn_string
+        self._baud = initial_baud
         self.master = None
         self.thread = None
         self.stop_event = threading.Event()
@@ -44,6 +44,13 @@ class TelemetryManager:
             # Add 'RANGEFINDER' if needed
         ]
 
+        # --- Subscribe internal handlers to bus events ---
+        # These handlers run in the publisher's thread (likely UI thread for button clicks)
+        # but the actions they trigger (start/stop) are thread-safe.
+        self.event_bus.subscribe(Events.CONNECTION_REQUEST, self.handle_connect_request)
+        self.event_bus.subscribe(Events.DISCONNECT_REQUEST, self.handle_disconnect_request)
+        logging.info("TelemetryManager subscribed to connection request events.")
+
 
     def _update_status(self, new_status: str, message: str = ""):
         """Updates internal status and publishes a status change event."""
@@ -66,18 +73,18 @@ class TelemetryManager:
 
 
     def connect(self):
-        """Establishes the MAVLink connection and updates status."""
+        """Establishes the MAVLink connection using internal connection string/_baud."""
         if self.master:
              logging.info("INFO: Already connected.")
              return True
 
-        self._update_status("CONNECTING", f"Attempting connection to {self.connection_string}...")
-        # print(f"Connecting to {self.connection_string} at {self.baud} baud...") # Replaced by status update
+        self._update_status("CONNECTING", f"Attempting connection to {self._connection_string}...")
+        # print(f"Connecting to {self._connection_string} at {self._baud} _baud...") # Replaced by status update
         try:
-            if self.connection_string.startswith(('udp:', 'tcp:')):
-                 self.master = mavutil.mavlink_connection(self.connection_string, source_system=255)
+            if self._connection_string.startswith(('udp:', 'tcp:')):
+                 self.master = mavutil.mavlink_connection(self._connection_string, source_system=255)
             else:
-                 self.master = mavutil.mavlink_connection(self.connection_string, baud=self.baud, source_system=255)
+                 self.master = mavutil.mavlink_connection(self._connection_string, baud=self._baud, source_system=255)
 
             if not self.master:
                  # print("ERROR: mavutil.mavlink_connection failed.") # Replaced
@@ -252,7 +259,7 @@ class TelemetryManager:
 
 
     def start(self):
-        """Starts the telemetry manager: connects, requests streams, and starts the receiver thread."""
+        """Starts the connection attempt and the receiver thread if successful."""
         if self.thread is not None and self.thread.is_alive():
             logging.warning("Manager already started.")
             return True
@@ -273,51 +280,64 @@ class TelemetryManager:
 
 
     def stop(self):
-        """Signals the receiver thread to stop and cleans up."""
+        """Signals the receiver thread to stop, closes connection, updates status."""
         logging.info("Stopping telemetry manager...")
-        if self.thread is None and self.current_status == "DISCONNECTED":
-             logging.info("Manager already stopped or was never started.")
+        # Prevent stopping if already stopped
+        if self.current_status == "DISCONNECTED" and (self.thread is None or not self.thread.is_alive()):
+             logging.info("Manager already stopped.")
              return
 
-        self.stop_event.set() # Signal the loop to stop
+        # Update status immediately (will be confirmed when loop exits/connection closes)
+        self._update_status("DISCONNECTING", "Stop requested.")
+
+        self.stop_event.set() # Signal the loop
 
         thread_was_running = False
         if self.thread is not None:
              thread_was_running = True
              logging.info("Waiting for receiver thread to join...")
-             self.thread.join(timeout=3.0)
+             self.thread.join(timeout=3.0) # Wait
              if self.thread.is_alive():
-                 logging.warning("Warning: Receive thread did not stop gracefully within timeout.")
+                 logging.warning("Receive thread did not stop gracefully within timeout.")
              self.thread = None
 
-        # Clean up connection if thread didn't
+        # Ensure connection is closed
         if self.master:
             logging.info("Closing master connection during stop.")
             try: self.master.close()
             except Exception as e: logging.error(f"Error during final close: {e}")
             self.master = None
 
-        # Ensure final status is DISCONNECTED if it wasn't already
-        if self.current_status != "DISCONNECTED":
-             self._update_status("DISCONNECTED", "Manager stopped.")
+        # Final status update
+        self._update_status("DISCONNECTED", "Manager stopped.")
+        logging.info("Telemetry manager stopped sequence complete.")
 
-        logging.info("Telemetry manager stopped.")
+    # --- Event Handlers ---
 
-
-    # --- Command Handling (Example - Not yet used) ---
-    # We would subscribe this method to Events.CONNECTION_REQUEST later
-    def handle_connection_request(self, conn_string, baud):
-         logging.info(f"Received connection request: {conn_string} @ {baud}")
-         if self.current_status != "DISCONNECTED":
-              logging.warning("Ignoring connection request: Manager already connected or busy.")
+    def handle_connect_request(self, conn_string, baud):
+        """EVENT HANDLER: Handles connect requests from the UI."""
+        logging.info(f"Handling connection request: {conn_string} @ {baud}")
+        # Only process if currently disconnected
+        if self.current_status != "DISCONNECTED" and self.current_status != "ERROR":
+              logging.warning("Ignoring connection request: Manager not in disconnected state.")
+              # Optionally publish a status update?
+              self._update_status(self.current_status, "Connect request ignored: Already busy/connected.")
               return
-         # Update internal settings and start
-         self.connection_string = conn_string
-         self.baud = baud
-         self.start()
+
+        # Update internal settings
+        self._connection_string = conn_string
+        self._baud = baud
+        # Trigger the start sequence (which includes connect)
+        self.start()
 
 
-    # --- get_data_queue REMOVED ---
-    # def get_data_queue(self):
-    #     """Returns the queue instance used for data."""
-    #     return self.data_queue
+    def handle_disconnect_request(self):
+        """EVENT HANDLER: Handles disconnect requests from the UI."""
+        logging.info("Handling disconnect request.")
+        # Only process if currently connected or trying to connect
+        if self.current_status == "DISCONNECTED" or self.current_status == "DISCONNECTING":
+             logging.warning("Ignoring disconnect request: Manager already disconnected/disconnecting.")
+             return
+
+        # Trigger the stop sequence
+        self.stop()
