@@ -50,16 +50,16 @@ pip install pymavlink pytest
 ```
     
 2. **(Optional) Create and activate a virtual environment:**
-		```
+
 ```bash
 python -m venv .venv 
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```    
 3. **Connect your autopilot and run:**
     
-    ```bash
+```bash
 python main.py
-    ```
+```
     
 4. **Select your connection and baud rate in the UI, then connect.**
 
