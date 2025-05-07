@@ -2,30 +2,157 @@
 
 import threading
 import time
-# import queue # No longer needed
 import math
 from pymavlink import mavutil
 import sys
-import logging # Use logging
+import logging 
+from PySide6.QtCore import QObject, QThread, Signal
 
 # Import the global event bus instance and Events class
 from utils.event_bus import event_bus, Events
 
-class TelemetryManager:
-    def __init__(self, initial_conn_string, initial_baud=115200, bus=event_bus): # Accept bus instance
-        """
-        Initializes the TelemetryManager using an EventBus.
-        """
+class TelemetryThread(QThread):
+    """Thread for receiving telemetry data."""
+    def __init__(self, master, signal_manager, stop_event):
+        super().__init__()
+        self.master = master
+        self.signal_manager = signal_manager
+        self.stop_event = stop_event
+        self.desired_message_types = [
+            'ATTITUDE', 'GPS_RAW_INT', 'GLOBAL_POSITION_INT', 'SYS_STATUS',
+            'RC_CHANNELS', 'VFR_HUD', 'HEARTBEAT', 'STATUSTEXT'
+        ]
+        
+    def run(self):
+        """Main thread loop for receiving telemetry."""
+        logging.info("Telemetry thread starting.")
+        active_connection = True
+        
+        while not self.stop_event.is_set() and active_connection:
+            # Check connection status
+            if not self.master or self.master.target_system == 0:
+                errmsg = ""
+                if not self.master: 
+                    errmsg = "Connection object is None."
+                else: 
+                    errmsg = "Connection lost (target system 0)."
+                self.signal_manager.connection_status_changed.emit("DISCONNECTED", errmsg)
+                active_connection = False
+                continue
+                
+            try:
+                # Receive ANY message
+                msg = self.master.recv_match(blocking=True, timeout=2.0)
+                
+                if msg is None: 
+                    continue  # Timeout, just loop
+                    
+                msg_type = msg.get_type()
+                
+                # Filter AFTER receiving
+                if msg_type not in self.desired_message_types:
+                    continue  # Skip messages we don't want
+                    
+                # --- Parse the messages we DO want ---
+                data = {"type": msg_type, "timestamp": time.time()}
+                publish_event = True  # Assume we publish unless parsing fails
+                
+                if msg_type == 'HEARTBEAT':
+                    data['armed'] = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
+                    data['mode'] = mavutil.mode_string_v10(msg)
+                    data['system_status'] = msg.system_status
+                    # If connection was lost, receiving heartbeat means it's back
+                    self.signal_manager.connection_status_changed.emit("CONNECTED", "Reconnected via Heartbeat")
+                    
+                elif msg_type == 'SYS_STATUS':
+                    data['battery_voltage'] = msg.voltage_battery / 1000.0
+                    data['battery_current'] = msg.current_battery / 100.0 if msg.current_battery != -1 else None
+                    data['battery_remaining'] = msg.battery_remaining if msg.battery_remaining != -1 else None
+                    
+                elif msg_type == 'GPS_RAW_INT':
+                    data['gps_fix_type'] = msg.fix_type
+                    data['gps_satellites'] = msg.satellites_visible
+                    
+                elif msg_type == 'GLOBAL_POSITION_INT':
+                    data['lat'] = msg.lat / 1e7
+                    data['lon'] = msg.lon / 1e7
+                    data['alt_msl'] = msg.alt / 1000.0
+                    data['alt_agl'] = msg.relative_alt / 1000.0
+                    
+                elif msg_type == 'VFR_HUD':
+                    data['airspeed'] = msg.airspeed
+                    data['groundspeed'] = msg.groundspeed
+                    data['heading'] = msg.heading
+                    data['throttle'] = msg.throttle
+                    data['climb_rate'] = msg.climb
+                    
+                elif msg_type == 'RC_CHANNELS':
+                    data['rc_channels'] = [
+                        msg.chan1_raw, msg.chan2_raw, msg.chan3_raw, msg.chan4_raw,
+                        msg.chan5_raw, msg.chan6_raw, msg.chan7_raw, msg.chan8_raw
+                    ]
+                    
+                elif msg_type == 'ATTITUDE':
+                    data['roll'] = math.degrees(msg.roll)
+                    data['pitch'] = math.degrees(msg.pitch)
+                    data['yaw'] = math.degrees(msg.yaw)
+                    
+                elif msg_type == 'STATUSTEXT':
+                    data['text'] = msg.text.strip()
+                    data['severity'] = msg.severity
+                    # Publish STATUSTEXT as a separate event
+                    self.signal_manager.status_text_received.emit(data['text'], data['severity'])
+                    # Don't publish this as a generic TELEMETRY_UPDATE event
+                    publish_event = False
+                    # Still log important status messages directly
+                    if data['severity'] <= mavutil.mavlink.MAV_SEVERITY_ERROR:
+                        logging.error(f"MAV STATUS [{data['severity']}]: {data['text']}")
+                    else:
+                        logging.info(f"MAV STATUS [{data['severity']}]: {data['text']}")
+                        
+                # --- Publish TELEMETRY_UPDATE event ---
+                # Check len > 2 ensures type and timestamp are present plus actual data
+                if publish_event and len(data) > 2:
+                    self.signal_manager.telemetry_update.emit(data)
+                    
+            except (ConnectionResetError, BrokenPipeError) as conn_e:
+                errmsg = f"{type(conn_e).__name__} in receive loop."
+                self.signal_manager.connection_status_changed.emit("ERROR", errmsg)
+                active_connection = False  # Stop loop
+                
+            except mavutil.mavlink.MAVLinkError as mav_e:
+                logging.warning(f"MAVLink Error in receive loop: {mav_e}. Continuing.")
+                
+            except AttributeError as attr_e:
+                logging.error(f"Attribute Error in receive loop (parsing issue?): {attr_e}", exc_info=True)
+                # Continue for now, maybe it was a bad message
+                
+            except Exception as e:
+                logging.error(f"Unhandled Exception in receive loop: {type(e).__name__}: {e}", exc_info=True)
+                time.sleep(0.1)  # Prevent fast spinning
+                
+        logging.info("Telemetry thread finished.")
+        if self.master:
+            logging.info("Closing connection from receive loop exit.")
+            try: 
+                self.master.close()
+            except Exception as e:
+                logging.error(f"Error closing connection: {e}")
+
+
+class TelemetryManager(QObject):
+    """Manages the connection to the vehicle and telemetry data."""
+    
+    def __init__(self, initial_conn_string, initial_baud=115200, signal_manager=None):
+        super().__init__()
         self._connection_string = initial_conn_string
         self._baud = initial_baud
         self.master = None
         self.thread = None
         self.stop_event = threading.Event()
-        # self.data_queue = data_queue if data_queue is not None else queue.Queue() # REMOVED
-        self.event_bus = bus # Store the event bus instance
-
-        self.current_status = "DISCONNECTED" # Add status tracking
-
+        self.signal_manager = signal_manager
+        self.current_status = "DISCONNECTED"
+        
         # Store desired frequencies using numeric IDs
         self.message_frequencies = {
             mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE: 100000,
@@ -35,101 +162,80 @@ class TelemetryManager:
             mavutil.mavlink.MAVLINK_MSG_ID_RC_CHANNELS: 500000,
             mavutil.mavlink.MAVLINK_MSG_ID_VFR_HUD: 200000,
             mavutil.mavlink.MAVLINK_MSG_ID_HEARTBEAT: 1000000,
-            #mavutil.mavlink.MAVLINK_MSG_ID_RANGEFINDER: 200000,
         }
-        # Store the names of message types we actually want to parse and publish
-        self.desired_message_types = [
-            'ATTITUDE', 'GPS_RAW_INT', 'GLOBAL_POSITION_INT', 'SYS_STATUS',
-            'RC_CHANNELS', 'VFR_HUD', 'HEARTBEAT', 'STATUSTEXT'
-            # Add 'RANGEFINDER' if needed
-        ]
-
-        # --- Subscribe internal handlers to bus events ---
-        # These handlers run in the publisher's thread (likely UI thread for button clicks)
-        # but the actions they trigger (start/stop) are thread-safe.
-        self.event_bus.subscribe(Events.CONNECTION_REQUEST, self.handle_connect_request)
-        self.event_bus.subscribe(Events.DISCONNECT_REQUEST, self.handle_disconnect_request)
-        logging.info("TelemetryManager subscribed to connection request events.")
-
-
+        
+        # Connect to signal manager signals
+        if signal_manager:
+            signal_manager.connection_request.connect(self.handle_connect_request)
+            signal_manager.disconnect_request.connect(self.handle_disconnect_request)
+            logging.info("TelemetryManager connected to signal manager.")
+            
     def _update_status(self, new_status: str, message: str = ""):
-        """Updates internal status and publishes a status change event."""
+        """Updates internal status and emits a status change signal."""
         if new_status != self.current_status:
             self.current_status = new_status
             logging.info(f"Connection Status: {new_status} - {message}")
-            # Use publish_safe as status updates might be handled by UI
-            self.event_bus.publish_safe(
-                Events.CONNECTION_STATUS_CHANGED,
-                status=new_status,
-                message=message
-            )
-        elif message: # Publish even if status is same, if there's a new message
-             logging.info(f"Connection Status Info: {message}")
-             self.event_bus.publish_safe(
-                Events.CONNECTION_STATUS_CHANGED,
-                status=self.current_status, # Send current status again
-                message=message
-            )
-
-
+            if self.signal_manager:
+                self.signal_manager.connection_status_changed.emit(new_status, message)
+        elif message:  # Emit even if status is same, if there's a new message
+            logging.info(f"Connection Status Info: {message}")
+            if self.signal_manager:
+                self.signal_manager.connection_status_changed.emit(self.current_status, message)
+                
     def connect(self):
         """Establishes the MAVLink connection using internal connection string/_baud."""
         if self.master:
-             logging.info("INFO: Already connected.")
-             return True
-
+            logging.info("INFO: Already connected.")
+            return True
+            
         self._update_status("CONNECTING", f"Attempting connection to {self._connection_string}...")
-        # print(f"Connecting to {self._connection_string} at {self._baud} _baud...") # Replaced by status update
+        
         try:
             if self._connection_string.startswith(('udp:', 'tcp:')):
-                 self.master = mavutil.mavlink_connection(self._connection_string, source_system=255)
+                self.master = mavutil.mavlink_connection(self._connection_string, source_system=255)
             else:
-                 self.master = mavutil.mavlink_connection(self._connection_string, baud=self._baud, source_system=255)
-
+                self.master = mavutil.mavlink_connection(self._connection_string, baud=self._baud, source_system=255)
+                
             if not self.master:
-                 # print("ERROR: mavutil.mavlink_connection failed.") # Replaced
-                 self._update_status("ERROR", "mavutil.mavlink_connection failed")
-                 return False
-
+                self._update_status("ERROR", "mavutil.mavlink_connection failed")
+                return False
+                
             self._update_status("CONNECTING", "Waiting for heartbeat...")
-            # print("Waiting for heartbeat...") # Replaced
             heartbeat = self.master.wait_heartbeat(timeout=10)
-
+            
             if heartbeat:
                 msg = f"Heartbeat received (Sys:{self.master.target_system}/Comp:{self.master.target_component})"
-                # print(f"Heartbeat received from System {self.master.target_system} Component {self.master.target_component}") # Replaced
                 self._update_status("CONNECTED", msg)
-                # print("Connection successful.") # Replaced
                 return True
             else:
-                # print("Failed to receive heartbeat within timeout.") # Replaced
                 self._update_status("ERROR", "Heartbeat timed out")
-                if self.master: self.master.close()
+                if self.master: 
+                    self.master.close()
                 self.master = None
                 return False
+                
         except Exception as e:
             errmsg = f"Connection failed: {type(e).__name__}: {e}"
-            # print(f"Failed to connect: {type(e).__name__}: {e}") # Replaced
             self._update_status("ERROR", errmsg)
-            if self.master: self.master.close()
+            if self.master: 
+                self.master.close()
             self.master = None
             return False
-
-
+            
     def _request_data_streams(self):
         """Sends commands to set message intervals."""
         if not self.master:
             logging.warning("Not connected. Cannot request streams.")
             return
-
+            
         logging.info("Requesting data streams...")
         for msg_id, frequency in self.message_frequencies.items():
             if frequency > 0:
                 try:
                     if not hasattr(self.master, 'mav'):
-                         logging.error(f"master.mav missing, cannot send command for MSG ID {msg_id}")
-                         continue
-
+                        logging.error(f"master.mav missing, cannot send command for MSG ID {msg_id}")
+                        continue
+                        
                     self.master.mav.command_long_send(
                         self.master.target_system,
                         self.master.target_component,
@@ -138,206 +244,60 @@ class TelemetryManager:
                     )
                     logging.debug(f"Requested ID {msg_id} at interval {frequency} us")
                     time.sleep(0.05)
+                    
                 except AttributeError as ae:
-                     logging.error(f"AttributeError sending interval command for MSG ID {msg_id}: {ae}. Check mav object.", exc_info=True)
-                     break
+                    logging.error(f"AttributeError sending interval command for MSG ID {msg_id}: {ae}. Check mav object.", exc_info=True)
+                    break
                 except Exception as e:
                     logging.error(f"Error requesting interval for MSG ID {msg_id}: {type(e).__name__}: {e}", exc_info=True)
+                    
         logging.info("Data stream requests sent.")
-
-
-    def _receive_loop(self):
-        """Receives messages and publishes events via the EventBus."""
-        logging.info("Receive loop starting.")
-        active_connection = True
-        while not self.stop_event.is_set() and active_connection:
-            # Check connection status
-            if not self.master or self.master.target_system == 0:
-                 errmsg = ""
-                 if not self.master: errmsg = "Connection object is None."
-                 else: errmsg = "Connection lost (target system 0)."
-                 self._update_status("DISCONNECTED", errmsg) # Update status on loss
-                 active_connection = False
-                 continue
-
-            try:
-                # Receive ANY message
-                msg = self.master.recv_match(blocking=True, timeout=2.0)
-
-                if msg is None: continue # Timeout, just loop
-
-                msg_type = msg.get_type()
-
-                # Filter AFTER receiving
-                if msg_type not in self.desired_message_types:
-                    continue # Skip messages we don't want
-
-                # --- Parse the messages we DO want ---
-                data = {"type": msg_type, "timestamp": time.time()}
-                publish_event = True # Assume we publish unless parsing fails
-
-                if msg_type == 'HEARTBEAT':
-                    data['armed'] = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
-                    data['mode'] = mavutil.mode_string_v10(msg)
-                    data['system_status'] = msg.system_status
-                    # If connection was lost, receiving heartbeat means it's back
-                    if self.current_status != "CONNECTED":
-                         self._update_status("CONNECTED", "Reconnected via Heartbeat")
-
-                elif msg_type == 'SYS_STATUS':
-                    data['battery_voltage'] = msg.voltage_battery / 1000.0
-                    data['battery_current'] = msg.current_battery / 100.0 if msg.current_battery != -1 else None
-                    data['battery_remaining'] = msg.battery_remaining if msg.battery_remaining != -1 else None
-                elif msg_type == 'GPS_RAW_INT':
-                    data['gps_fix_type'] = msg.fix_type
-                    data['gps_satellites'] = msg.satellites_visible
-                elif msg_type == 'GLOBAL_POSITION_INT':
-                    data['lat'] = msg.lat / 1e7
-                    data['lon'] = msg.lon / 1e7
-                    data['alt_msl'] = msg.alt / 1000.0
-                    data['alt_agl'] = msg.relative_alt / 1000.0
-                # elif msg_type == 'RANGEFINDER': ...
-                elif msg_type == 'VFR_HUD':
-                    data['airspeed'] = msg.airspeed
-                    data['groundspeed'] = msg.groundspeed
-                    data['heading'] = msg.heading
-                    data['throttle'] = msg.throttle
-                    data['climb_rate'] = msg.climb
-                elif msg_type == 'RC_CHANNELS':
-                    data['rc_channels'] = [
-                        msg.chan1_raw, msg.chan2_raw, msg.chan3_raw, msg.chan4_raw,
-                        msg.chan5_raw, msg.chan6_raw, msg.chan7_raw, msg.chan8_raw ]
-                elif msg_type == 'ATTITUDE':
-                    data['roll'] = math.degrees(msg.roll)
-                    data['pitch'] = math.degrees(msg.pitch)
-                    data['yaw'] = math.degrees(msg.yaw)
-                elif msg_type == 'STATUSTEXT':
-                     data['text'] = msg.text.strip()
-                     data['severity'] = msg.severity
-                     # Publish STATUSTEXT as a separate event
-                     self.event_bus.publish_safe(Events.STATUS_TEXT_RECEIVED, **data)
-                     # Don't publish this as a generic TELEMETRY_UPDATE event
-                     publish_event = False
-                     # Still log important status messages directly
-                     if data['severity'] <= mavutil.mavlink.MAV_SEVERITY_ERROR:
-                         logging.error(f"MAV STATUS [{data['severity']}]: {data['text']}")
-                     else:
-                          logging.info(f"MAV STATUS [{data['severity']}]: {data['text']}")
-
-
-                # --- Publish TELEMETRY_UPDATE event ---
-                # Check len > 2 ensures type and timestamp are present plus actual data
-                if publish_event and len(data) > 2:
-                    # Use publish_safe to handle potential UI subscribers correctly
-                    self.event_bus.publish_safe(Events.TELEMETRY_UPDATE, data_update=data)
-
-            except (ConnectionResetError, BrokenPipeError) as conn_e:
-                errmsg = f"{type(conn_e).__name__} in receive loop."
-                self._update_status("ERROR", errmsg)
-                active_connection = False # Stop loop
-            except mavutil.mavlink.MAVLinkError as mav_e:
-                logging.warning(f"MAVLink Error in receive loop: {mav_e}. Continuing.")
-            except AttributeError as attr_e:
-                 logging.error(f"Attribute Error in receive loop (parsing issue?): {attr_e}", exc_info=True)
-                 # Continue for now, maybe it was a bad message
-            except Exception as e:
-                logging.error(f"Unhandled Exception in receive loop: {type(e).__name__}: {e}", exc_info=True)
-                time.sleep(0.1) # Prevent fast spinning
-
-        logging.info("Receive loop finished.")
-        if self.master:
-            logging.info("Closing connection from receive loop exit.")
-            try: self.master.close()
-            except Exception as e: logging.error(f"Error closing connection in loop: {e}")
-            self.master = None
-        # Ensure status is updated if loop exits cleanly via stop_event while connected
-        if self.current_status == "CONNECTED" and self.stop_event.is_set():
-             self._update_status("DISCONNECTED", "Manager stopped by user.")
-        elif self.current_status != "DISCONNECTED" and self.current_status != "ERROR":
-             # If loop exited for other reason while not Disconnected/Error state
-             self._update_status("DISCONNECTED", "Receive loop exited unexpectedly.")
-
-
+        
     def start(self):
-        """Starts the connection attempt and the receiver thread if successful."""
-        if self.thread is not None and self.thread.is_alive():
-            logging.warning("Manager already started.")
+        """Starts the telemetry thread."""
+        if self.thread and self.thread.isRunning():
+            logging.warning("Telemetry thread already running.")
             return True
-        # Reset stop event in case it was previously set
-        self.stop_event.clear()
-        # Connect will update status
-        if self.connect():
-            self._request_data_streams()
-            self.thread = threading.Thread(target=self._receive_loop, name="MAVLinkReceiver", daemon=True)
-            self.thread.start()
-            logging.info("Telemetry manager started successfully.")
-            return True
-        else:
-            # connect() already updated status to ERROR or DISCONNECTED
-            logging.error("Failed to start telemetry manager (connection failed).")
-            self.thread = None
+            
+        if not self.master:
+            logging.error("Cannot start telemetry thread: Not connected.")
             return False
-
-
+            
+        self.stop_event.clear()
+        self.thread = TelemetryThread(self.master, self.signal_manager, self.stop_event)
+        self.thread.start()
+        logging.info("Telemetry thread started.")
+        return True
+        
     def stop(self):
-        """Signals the receiver thread to stop, closes connection, updates status."""
-        logging.info("Stopping telemetry manager...")
-        # Prevent stopping if already stopped
-        if self.current_status == "DISCONNECTED" and (self.thread is None or not self.thread.is_alive()):
-             logging.info("Manager already stopped.")
-             return
-
-        # Update status immediately (will be confirmed when loop exits/connection closes)
-        self._update_status("DISCONNECTING", "Stop requested.")
-
-        self.stop_event.set() # Signal the loop
-
-        thread_was_running = False
-        if self.thread is not None:
-             thread_was_running = True
-             logging.info("Waiting for receiver thread to join...")
-             self.thread.join(timeout=3.0) # Wait
-             if self.thread.is_alive():
-                 logging.warning("Receive thread did not stop gracefully within timeout.")
-             self.thread = None
-
-        # Ensure connection is closed
+        """Stops the telemetry thread and closes the connection."""
+        if self.thread and self.thread.isRunning():
+            logging.info("Stopping telemetry thread...")
+            self.stop_event.set()
+            self.thread.wait()  # Wait for thread to finish
+            logging.info("Telemetry thread stopped.")
+            
         if self.master:
-            logging.info("Closing master connection during stop.")
-            try: self.master.close()
-            except Exception as e: logging.error(f"Error during final close: {e}")
+            logging.info("Closing connection...")
+            try:
+                self.master.close()
+            except Exception as e:
+                logging.error(f"Error closing connection: {e}")
             self.master = None
-
-        # Final status update
-        self._update_status("DISCONNECTED", "Manager stopped.")
-        logging.info("Telemetry manager stopped sequence complete.")
-
-    # --- Event Handlers ---
-
+            
+        self._update_status("DISCONNECTED", "Connection closed.")
+        
     def handle_connect_request(self, conn_string, baud):
-        """EVENT HANDLER: Handles connect requests from the UI."""
-        logging.info(f"Handling connection request: {conn_string} @ {baud}")
-        # Only process if currently disconnected
-        if self.current_status != "DISCONNECTED" and self.current_status != "ERROR":
-              logging.warning("Ignoring connection request: Manager not in disconnected state.")
-              # Optionally publish a status update?
-              self._update_status(self.current_status, "Connect request ignored: Already busy/connected.")
-              return
-
-        # Update internal settings
+        """Handles a connection request signal."""
+        logging.info(f"Connection request received: {conn_string} at {baud} baud")
         self._connection_string = conn_string
         self._baud = baud
-        # Trigger the start sequence (which includes connect)
-        self.start()
-
-
+        
+        if self.connect():
+            self._request_data_streams()
+            self.start()
+            
     def handle_disconnect_request(self):
-        """EVENT HANDLER: Handles disconnect requests from the UI."""
-        logging.info("Handling disconnect request.")
-        # Only process if currently connected or trying to connect
-        if self.current_status == "DISCONNECTED" or self.current_status == "DISCONNECTING":
-             logging.warning("Ignoring disconnect request: Manager already disconnected/disconnecting.")
-             return
-
-        # Trigger the stop sequence
+        """Handles a disconnect request signal."""
+        logging.info("Disconnect request received")
         self.stop()
