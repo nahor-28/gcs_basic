@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %
 def main():
     # Create Qt application
     app = QApplication(sys.argv)
-    
+    app.setStyle("Fusion")
     # Create signal manager
     signal_manager = SignalManager()
     

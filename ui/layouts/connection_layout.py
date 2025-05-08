@@ -13,30 +13,32 @@ class ConnectionLayout(QGroupBox):
     def setup_ui(self):
         """Creates and arranges the connection controls."""
         layout = QHBoxLayout()
-        layout.setSpacing(5)  # Reduce spacing
-        layout.setContentsMargins(2, 2, 2, 2)  # Reduce margins
+        layout.setSpacing(10)  # Reduce spacing
+        layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
         
         # Connection input
         self.connection_input = QComboBox()
         self.connection_input.setEditable(True)
         self.connection_input.setInsertPolicy(QComboBox.InsertPolicy.InsertAtBottom)
-        self.connection_input.setFixedWidth(150)  # Fixed width for connection input
+        self.connection_input.setFixedWidth(150)
+        self.connection_input.setFixedHeight(30)
         self.populate_ports()
         layout.addWidget(self.connection_input)
         
         # Baud rate
         self.baud_rate_combo = QComboBox()
         self.baud_rate_combo.addItems(["57600", "115200", "921600"])
-        self.baud_rate_combo.setFixedWidth(80)  # Fixed width for baud rate
+        self.baud_rate_combo.setFixedWidth(80)
+        self.baud_rate_combo.setFixedHeight(30)
         layout.addWidget(self.baud_rate_combo)
         
         # Connect button
         self.connect_button = QPushButton("Connect")
-        self.connect_button.setFixedWidth(80)  # Fixed width for connect button
+        self.connect_button.setFixedHeight(30)
         layout.addWidget(self.connect_button)
         
         self.setLayout(layout)
-        self.setFixedHeight(30)  # Fixed height for the entire layout
+        self.setFixedHeight(50)  # Fixed height for the entire layout
         
     def populate_ports(self):
         """Populates the connection combo box with available serial ports."""

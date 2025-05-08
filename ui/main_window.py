@@ -26,8 +26,8 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(0)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        # main_layout.setSpacing(0)
+        # main_layout.setContentsMargins(0, 0, 0, 0)
         
         # Add header
         self.header_layout = HeaderLayout()
@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         # Create content area
         content_widget = QWidget()
         content_layout = QHBoxLayout(content_widget)
-        content_layout.setContentsMargins(5, 5, 5, 5)
+        # content_layout.setContentsMargins(5, 5, 5, 5)
         
         # Create splitter for resizable panels
         splitter = QSplitter(Qt.Horizontal)

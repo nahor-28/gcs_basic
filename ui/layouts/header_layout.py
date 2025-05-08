@@ -14,8 +14,8 @@ class HeaderLayout(QWidget):
     def setup_ui(self):
         """Creates and arranges the header elements."""
         layout = QHBoxLayout()
-        layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(5)
+        layout.setContentsMargins(15, 5, 15, 5)
+        layout.setSpacing(10)
         
         # Left section
         left_section = QHBoxLayout()
@@ -23,7 +23,7 @@ class HeaderLayout(QWidget):
         
         # Connection status
         self.connection_status = QLabel("Disconnected")
-        self.connection_status.setStyleSheet("color: red;")
+        self.connection_status.setStyleSheet("color: red; margin-left: 10px;")
         left_section.addWidget(self.connection_status)
         
         # Add connection layout
@@ -32,7 +32,7 @@ class HeaderLayout(QWidget):
         self.connection_layout.setStyleSheet("""
             QGroupBox {
                 border: none;
-                margin-top: 0px;
+                padding: 0 10px;
             }
             QGroupBox::title {
                 display: none;
@@ -57,6 +57,7 @@ class HeaderLayout(QWidget):
             }
             QPushButton:disabled {
                 background-color: #cccccc;
+                color: #222;
             }
         """)
         left_section.addWidget(self.arm_button)
@@ -106,13 +107,7 @@ class HeaderLayout(QWidget):
         self.setLayout(layout)
         
         # Set fixed height and style
-        self.setFixedHeight(40)
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #f8f9fa;
-                border-bottom: 1px solid #dee2e6;
-            }
-        """)
+        self.setFixedHeight(45)
         
     def show_menu(self):
         """Show the menu with parameter panel option."""
@@ -130,12 +125,12 @@ class HeaderLayout(QWidget):
         """Update connection status display."""
         if status == "CONNECTED":
             self.connection_status.setText("Connected")
-            self.connection_status.setStyleSheet("color: green;")
+            self.connection_status.setStyleSheet("color: green; padding: 0px 10px;")
             self.arm_button.setEnabled(True)
             self.connection_layout.set_connected(True)
         else:
             self.connection_status.setText("Disconnected")
-            self.connection_status.setStyleSheet("color: red;")
+            self.connection_status.setStyleSheet("color: red; padding: 0px 10px;")
             self.arm_button.setEnabled(False)
             self.connection_layout.set_connected(False)
             
