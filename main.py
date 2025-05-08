@@ -1,4 +1,4 @@
-# main.py (Pass initial connection string)
+# main.py
 
 import sys
 import logging
@@ -16,9 +16,6 @@ DEFAULT_BAUD_RATE = 115200 # Serial baud rate
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
-
-# --- Remove process_queue function ---
-# def process_queue(): ... # REMOVED
 
 # --- Main Class ---
 def main():
