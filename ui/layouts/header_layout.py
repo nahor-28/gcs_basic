@@ -1,9 +1,10 @@
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QSizePolicy
+    QFrame, QSizePolicy, QMenu
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
+from ui.layouts.connection_layout import ConnectionLayout
 
 class HeaderLayout(QWidget):
     def __init__(self, parent=None):
@@ -13,8 +14,8 @@ class HeaderLayout(QWidget):
     def setup_ui(self):
         """Creates and arranges the header elements."""
         layout = QHBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(10)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(5)
         
         # Left section
         left_section = QHBoxLayout()
@@ -24,6 +25,20 @@ class HeaderLayout(QWidget):
         self.connection_status = QLabel("Disconnected")
         self.connection_status.setStyleSheet("color: red;")
         left_section.addWidget(self.connection_status)
+        
+        # Add connection layout
+        self.connection_layout = ConnectionLayout()
+        self.connection_layout.setMaximumHeight(40)  # Make it fit in header
+        self.connection_layout.setStyleSheet("""
+            QGroupBox {
+                border: none;
+                margin-top: 0px;
+            }
+            QGroupBox::title {
+                display: none;
+            }
+        """)
+        left_section.addWidget(self.connection_layout)
         
         # Mode display
         self.mode_label = QLabel("Mode: ---")
@@ -68,19 +83,20 @@ class HeaderLayout(QWidget):
         self.system_id = QLabel("System ID: ---")
         right_section.addWidget(self.system_id)
         
-        # Hamburger menu button
-        self.menu_button = QPushButton()
-        self.menu_button.setIcon(QIcon(":/icons/menu.png"))  # You'll need to add this icon
+        # Menu button with hamburger icon (≡)
+        self.menu_button = QPushButton("≡")
         self.menu_button.setStyleSheet("""
             QPushButton {
                 border: none;
-                padding: 5px;
+                padding: 5px 10px;
+                font-size: 20px;
             }
             QPushButton:hover {
                 background-color: #f0f0f0;
                 border-radius: 3px;
             }
         """)
+        self.menu_button.clicked.connect(self.show_menu)
         right_section.addWidget(self.menu_button)
         
         # Add right section to main layout
@@ -98,16 +114,30 @@ class HeaderLayout(QWidget):
             }
         """)
         
+    def show_menu(self):
+        """Show the menu with parameter panel option."""
+        menu = QMenu(self)
+        param_action = menu.addAction("Parameters")
+        param_action.triggered.connect(self.show_parameters)
+        menu.exec(self.menu_button.mapToGlobal(self.menu_button.rect().bottomLeft()))
+        
+    def show_parameters(self):
+        """Show the parameters panel."""
+        # This will be implemented later
+        pass
+        
     def update_connection_status(self, status, message=""):
         """Update connection status display."""
         if status == "CONNECTED":
             self.connection_status.setText("Connected")
             self.connection_status.setStyleSheet("color: green;")
             self.arm_button.setEnabled(True)
+            self.connection_layout.set_connected(True)
         else:
             self.connection_status.setText("Disconnected")
             self.connection_status.setStyleSheet("color: red;")
             self.arm_button.setEnabled(False)
+            self.connection_layout.set_connected(False)
             
     def update_mode(self, mode):
         """Update flight mode display."""
@@ -126,4 +156,4 @@ class HeaderLayout(QWidget):
         
     def update_system_id(self, system_id):
         """Update system ID display."""
-        self.system_id.setText(f"System ID: {system_id}") 
+        self.system_id.setText(f"System ID: {system_id}")

@@ -5,13 +5,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot
 
 from ui.layouts.header_layout import HeaderLayout
-from ui.layouts.connection_layout import ConnectionLayout
 from ui.layouts.telemetry_layout import TelemetryLayout
 from ui.layouts.map_layout import MapLayout
 from ui.layouts.status_layout import StatusLayout
-
+from core.signal_manager import SignalManager
 class MainWindow(QMainWindow):
-    def __init__(self, signal_manager):
+    def __init__(self, signal_manager: SignalManager):
         super().__init__()
         self.signal_manager = signal_manager
         self.setup_ui()
@@ -45,10 +44,7 @@ class MainWindow(QMainWindow):
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         
-        # Add connection and telemetry layouts
-        self.connection_layout = ConnectionLayout()
-        left_layout.addWidget(self.connection_layout)
-        
+        # Add telemetry layout
         self.telemetry_layout = TelemetryLayout()
         left_layout.addWidget(self.telemetry_layout)
         
@@ -82,9 +78,8 @@ class MainWindow(QMainWindow):
     def connect_signals(self):
         """Connects UI signals to slots."""
         # Connect button signals
-        self.connection_layout.connect_button.clicked.connect(self.on_connect_clicked)
+        self.header_layout.connection_layout.connect_button.clicked.connect(self.on_connect_clicked)
         self.header_layout.arm_button.clicked.connect(self.on_arm_clicked)
-        self.header_layout.menu_button.clicked.connect(self.on_menu_clicked)
         
         # Connect signal manager signals to slots
         self.signal_manager.telemetry_update.connect(self.update_telemetry)
@@ -120,17 +115,6 @@ class MainWindow(QMainWindow):
             
     def update_connection_status(self, status, message=""):
         """Update connection status display."""
-        # Update connection layout
-        if status == "CONNECTED":
-            self.connection_layout.connect_button.setText("Disconnect")
-            self.connection_layout.connection_input.setEnabled(False)
-            self.connection_layout.baud_rate_combo.setEnabled(False)
-        else:
-            self.connection_layout.connect_button.setText("Connect")
-            self.connection_layout.connection_input.setEnabled(True)
-            self.connection_layout.baud_rate_combo.setEnabled(True)
-            
-        # Update header status
         self.header_layout.update_connection_status(status, message)
             
     def update_status_message(self, text, severity):
@@ -139,9 +123,9 @@ class MainWindow(QMainWindow):
         
     def on_connect_clicked(self):
         """Handles connect button click."""
-        if self.connection_layout.connect_button.text() == "Connect":
-            conn_str = self.connection_layout.connection_input.currentText()
-            baud_str = self.connection_layout.baud_rate_combo.currentText()
+        if self.header_layout.connection_layout.connect_button.text() == "Connect":
+            conn_str = self.header_layout.connection_layout.connection_input.currentText()
+            baud_str = self.header_layout.connection_layout.baud_rate_combo.currentText()
             
             if not conn_str:
                 QMessageBox.critical(self, "Connection Error", "Please select a valid connection string.")
@@ -163,8 +147,3 @@ class MainWindow(QMainWindow):
         """Handles arm/disarm button click."""
         # TODO: Implement arm/disarm functionality
         pass
-        
-    def on_menu_clicked(self):
-        """Handles menu button click."""
-        # TODO: Implement menu functionality
-        pass 
