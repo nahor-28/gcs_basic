@@ -9,6 +9,7 @@ from ui.layouts.telemetry_layout import TelemetryLayout
 from ui.layouts.map_layout import MapLayout
 from ui.layouts.status_layout import StatusLayout
 from core.signal_manager import SignalManager
+
 class MainWindow(QMainWindow):
     def __init__(self, signal_manager: SignalManager):
         super().__init__()

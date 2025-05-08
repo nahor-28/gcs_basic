@@ -1,0 +1,88 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: gap: https://ssl.gstatic.com 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; media-src *; img-src 'self' data: content: https://*.tile.openstreetmap.org;">
+    <title>Drone Map</title>
+    <link rel="stylesheet" href="./leaflet/leaflet.css" />
+    <script src="./leaflet/leaflet.js"></script>
+    <style>
+        html, body { 
+            height: 100%; 
+            width: 100%;
+            margin: 0; 
+            padding: 0; 
+        }
+        #map { 
+            height: 100%; 
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // Initialize the map
+        var map = L.map('map').setView([21.146, 79.08], 10);
+        
+        // Try multiple tile providers
+        function addTileLayer() {
+            // First try OpenStreetMap
+            var osmTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                subdomains: 'abc'
+            });
+            
+            // Add the tile layer to the map
+            osmTiles.addTo(map);
+            
+            // Handle tile loading errors
+            osmTiles.on('tileerror', function(error) {
+                console.log('OSM Tile loading error, trying alternative source');
+                osmTiles.remove();
+                
+                // Try Carto as a fallback
+                var cartoTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    subdomains: 'abcd',
+                    maxZoom: 19
+                }).addTo(map);
+            });
+        }
+        
+        // Add tile layer
+        addTileLayer();
+        
+        var droneIcon = L.icon({
+            iconUrl: 'images/drone-icon.png',
+            shadowUrl: 'images/shadow-icon.png',
+
+            iconSize:     [64, 64], // size of the icon
+            shadowSize:   [48, 48], // size of the shadow
+        });
+
+        // Add initial marker
+        var marker = L.marker([0, 0], {icon: droneIcon}).addTo(map);
+        
+        // Function to update marker position
+        function updateMarkerPosition(lat, lon) {
+            if (marker) {
+                marker.setLatLng([lat, lon]);
+                map.panTo([lat, lon]);
+            }
+        }
+        
+        // Debug tile loading
+        map.on('tileerror', function(e) {
+            console.log('Tile error:', e);
+        });
+        
+        // Log when map is ready
+        map.whenReady(function() {
+            console.log('Map is ready and initialized');
+        });
+    </script>
+</body>
+</html>
