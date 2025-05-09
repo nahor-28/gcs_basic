@@ -7,7 +7,7 @@ import serial.tools.list_ports
 
 class ConnectionLayout(QGroupBox):
     def __init__(self, parent=None):
-        super().__init__("Connection", parent)
+        super().__init__("", parent)
         self.setup_ui()
         
     def setup_ui(self):
