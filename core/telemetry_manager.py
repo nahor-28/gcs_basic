@@ -6,18 +6,25 @@ import math
 from pymavlink import mavutil
 import sys
 import logging 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, QThread, Signal, QTimer
 
 # Import the global event bus instance and Events class
 from utils.event_bus import event_bus, Events
 
 class TelemetryThread(QThread):
     """Thread for receiving telemetry data."""
+    # Constants for connection monitoring
+    HEARTBEAT_TIMEOUT = 5.0  # seconds
+    MAX_RECONNECT_ATTEMPTS = 5
+    RECONNECT_BACKOFF_BASE = 1.0  # seconds
+    
     def __init__(self, master, signal_manager, stop_event):
         super().__init__()
         self.master = master
         self.signal_manager = signal_manager
         self.stop_event = stop_event
+        self.last_heartbeat_time = time.time()
+        self.reconnect_attempts = 0
         self.desired_message_types = [
             'ATTITUDE', 'GPS_RAW_INT', 'GLOBAL_POSITION_INT', 'SYS_STATUS',
             'RC_CHANNELS', 'VFR_HUD', 'HEARTBEAT', 'STATUSTEXT'
@@ -41,6 +48,17 @@ class TelemetryThread(QThread):
                 continue
                 
             try:
+                # Check for heartbeat timeout
+                current_time = time.time()
+                if current_time - self.last_heartbeat_time > self.HEARTBEAT_TIMEOUT:
+                    errmsg = f"No heartbeat received for {self.HEARTBEAT_TIMEOUT} seconds"
+                    self.signal_manager.connection_status_changed.emit("RECONNECTING", errmsg)
+                    active_connection = False
+                    # Signal the TelemetryManager to attempt reconnection
+                    if hasattr(self.signal_manager, 'reconnect_request'):
+                        self.signal_manager.reconnect_request.emit()
+                    continue
+                
                 # Receive ANY message
                 msg = self.master.recv_match(blocking=True, timeout=2.0)
                 
@@ -55,14 +73,17 @@ class TelemetryThread(QThread):
                     
                 # --- Parse the messages we DO want ---
                 data = {"type": msg_type, "timestamp": time.time()}
-                publish_event = True  # Assume we publish unless parsing fails
+                publish_event = True
                 
                 if msg_type == 'HEARTBEAT':
+                    self.last_heartbeat_time = time.time()  # Update heartbeat timestamp
                     data['armed'] = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
                     data['mode'] = mavutil.mode_string_v10(msg)
                     data['system_status'] = msg.system_status
                     # If connection was lost, receiving heartbeat means it's back
-                    self.signal_manager.connection_status_changed.emit("CONNECTED", "Reconnected via Heartbeat")
+                    if self.reconnect_attempts > 0:
+                        self.reconnect_attempts = 0  # Reset reconnect attempts
+                        self.signal_manager.connection_status_changed.emit("CONNECTED", "Reconnected via Heartbeat")
                     
                 elif msg_type == 'SYS_STATUS':
                     data['battery_voltage'] = msg.voltage_battery / 1000.0
@@ -120,16 +141,12 @@ class TelemetryThread(QThread):
                 self.signal_manager.connection_status_changed.emit("ERROR", errmsg)
                 active_connection = False  # Stop loop
                 
-            except mavutil.mavlink.MAVLinkError as mav_e:
-                logging.warning(f"MAVLink Error in receive loop: {mav_e}. Continuing.")
-                
-            except AttributeError as attr_e:
-                logging.error(f"Attribute Error in receive loop (parsing issue?): {attr_e}", exc_info=True)
-                # Continue for now, maybe it was a bad message
-                
             except Exception as e:
-                logging.error(f"Unhandled Exception in receive loop: {type(e).__name__}: {e}", exc_info=True)
-                time.sleep(0.1)  # Prevent fast spinning
+                if isinstance(e, mavutil.mavlink.MAVLinkError):
+                    logging.warning(f"MAVLink Error in receive loop: {e}. Continuing.")
+                else:
+                    logging.error(f"Unhandled Exception in receive loop: {type(e).__name__}: {e}", exc_info=True)
+                    time.sleep(0.1)  # Prevent fast spinning
                 
         logging.info("Telemetry thread finished.")
         if self.master:
@@ -138,6 +155,17 @@ class TelemetryThread(QThread):
                 self.master.close()
             except Exception as e:
                 logging.error(f"Error closing connection: {e}")
+                
+    def reset_heartbeat(self):
+        """Reset the heartbeat timer."""
+        self.last_heartbeat_time = time.time()
+        
+    def increment_reconnect_attempt(self):
+        """Increment the reconnect attempt counter and return the backoff time."""
+        self.reconnect_attempts += 1
+        if self.reconnect_attempts > self.MAX_RECONNECT_ATTEMPTS:
+            return -1  # Signal to stop reconnecting
+        return self.RECONNECT_BACKOFF_BASE * (2 ** (self.reconnect_attempts - 1))  # Exponential backoff
 
 
 class TelemetryManager(QObject):
@@ -152,6 +180,8 @@ class TelemetryManager(QObject):
         self.stop_event = threading.Event()
         self.signal_manager = signal_manager
         self.current_status = "DISCONNECTED"
+        self.reconnect_timer = None
+        self._is_connecting = False  # Add flag to prevent multiple connection attempts
         
         # Store desired frequencies using numeric IDs
         self.message_frequencies = {
@@ -168,6 +198,7 @@ class TelemetryManager(QObject):
         if signal_manager:
             signal_manager.connection_request.connect(self.handle_connect_request)
             signal_manager.disconnect_request.connect(self.handle_disconnect_request)
+            signal_manager.reconnect_request.connect(self.attempt_reconnect)
             logging.info("TelemetryManager connected to signal manager.")
             
     def _update_status(self, new_status: str, message: str = ""):
@@ -184,13 +215,26 @@ class TelemetryManager(QObject):
                 
     def connect(self):
         """Establishes the MAVLink connection using internal connection string/_baud."""
+        if self._is_connecting:
+            logging.info("Connection attempt already in progress.")
+            return False
+            
         if self.master:
-            logging.info("INFO: Already connected.")
+            logging.info("Already connected.")
             return True
             
+        self._is_connecting = True
         self._update_status("CONNECTING", f"Attempting connection to {self._connection_string}...")
         
         try:
+            # Ensure any existing connection is properly closed
+            if self.master:
+                try:
+                    self.master.close()
+                except Exception as e:
+                    logging.error(f"Error closing existing connection: {e}")
+                self.master = None
+            
             if self._connection_string.startswith(('udp:', 'tcp:')):
                 self.master = mavutil.mavlink_connection(self._connection_string, source_system=255)
             else:
@@ -198,6 +242,7 @@ class TelemetryManager(QObject):
                 
             if not self.master:
                 self._update_status("ERROR", "mavutil.mavlink_connection failed")
+                self._is_connecting = False
                 return False
                 
             self._update_status("CONNECTING", "Waiting for heartbeat...")
@@ -206,20 +251,26 @@ class TelemetryManager(QObject):
             if heartbeat:
                 msg = f"Heartbeat received (Sys:{self.master.target_system}/Comp:{self.master.target_component})"
                 self._update_status("CONNECTED", msg)
+                self._is_connecting = False
                 return True
             else:
                 self._update_status("ERROR", "Heartbeat timed out")
                 if self.master: 
                     self.master.close()
                 self.master = None
+                self._is_connecting = False
                 return False
                 
         except Exception as e:
             errmsg = f"Connection failed: {type(e).__name__}: {e}"
             self._update_status("ERROR", errmsg)
             if self.master: 
-                self.master.close()
+                try:
+                    self.master.close()
+                except Exception as close_e:
+                    logging.error(f"Error closing connection after failure: {close_e}")
             self.master = None
+            self._is_connecting = False
             return False
             
     def _request_data_streams(self):
@@ -286,12 +337,16 @@ class TelemetryManager(QObject):
             self.master = None
             
         self._update_status("DISCONNECTED", "Connection closed.")
+        self._is_connecting = False  # Reset connection flag
         
     def handle_connect_request(self, conn_string, baud):
         """Handles a connection request signal."""
         logging.info(f"Connection request received: {conn_string} at {baud} baud")
         self._connection_string = conn_string
         self._baud = baud
+        
+        # Stop any existing connection first
+        self.stop()
         
         if self.connect():
             self._request_data_streams()
@@ -301,3 +356,43 @@ class TelemetryManager(QObject):
         """Handles a disconnect request signal."""
         logging.info("Disconnect request received")
         self.stop()
+        
+    def attempt_reconnect(self):
+        """Attempts to reconnect to the vehicle."""
+        if self._is_connecting:
+            logging.info("Reconnection attempt already in progress.")
+            return
+            
+        if self.thread and self.thread.isRunning():
+            backoff_time = self.thread.increment_reconnect_attempt()
+            if backoff_time < 0:
+                self._update_status("ERROR", "Maximum reconnection attempts reached")
+                self.stop()
+                return
+                
+            self._update_status("RECONNECTING", f"Attempting reconnection (attempt {self.thread.reconnect_attempts})")
+            
+            # Schedule the reconnection attempt
+            if self.reconnect_timer:
+                self.reconnect_timer.stop()
+            self.reconnect_timer = QTimer()
+            self.reconnect_timer.setSingleShot(True)
+            self.reconnect_timer.timeout.connect(self._perform_reconnect)
+            self.reconnect_timer.start(int(backoff_time * 1000))  # Convert to milliseconds
+            
+    def _perform_reconnect(self):
+        """Performs the actual reconnection attempt."""
+        # Stop any existing connection first
+        if self.master:
+            try:
+                self.master.close()
+            except Exception as e:
+                logging.error(f"Error closing old connection: {e}")
+            self.master = None
+            
+        if self.connect():
+            self._request_data_streams()
+            if self.thread:
+                self.thread.reset_heartbeat()
+        else:
+            self.attempt_reconnect()  # Try again if connection failed

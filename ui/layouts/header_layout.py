@@ -123,17 +123,42 @@ class HeaderLayout(QWidget):
         
     def update_connection_status(self, status, message=""):
         """Update connection status display."""
+        status_text = status
+        status_color = "red"  # Default color
+        
         if status == "CONNECTED":
-            self.connection_status.setText("Connected")
-            self.connection_status.setStyleSheet("color: green; padding: 0px 10px;")
+            status_text = "Connected"
+            status_color = "green"
             self.arm_button.setEnabled(True)
             self.connection_layout.set_connected(True)
-        else:
-            self.connection_status.setText("Disconnected")
-            self.connection_status.setStyleSheet("color: red; padding: 0px 10px;")
+        elif status == "CONNECTING":
+            status_text = "Connecting..."
+            status_color = "orange"
+            self.arm_button.setEnabled(False)
+            self.connection_layout.set_connected(False)
+        elif status == "RECONNECTING":
+            status_text = "Reconnecting..."
+            status_color = "orange"
+            self.arm_button.setEnabled(False)
+            self.connection_layout.set_connected(False)
+        elif status == "ERROR":
+            status_text = "Error"
+            status_color = "red"
+            self.arm_button.setEnabled(False)
+            self.connection_layout.set_connected(False)
+        else:  # DISCONNECTED
+            status_text = "Disconnected"
+            status_color = "red"
             self.arm_button.setEnabled(False)
             self.connection_layout.set_connected(False)
             
+        # Update status label with message if provided
+        if message:
+            status_text = f"{status_text}: {message}"
+            
+        self.connection_status.setText(status_text)
+        self.connection_status.setStyleSheet(f"color: {status_color};")
+        
     def update_mode(self, mode):
         """Update flight mode display."""
         self.mode_label.setText(f"Mode: {mode}")
