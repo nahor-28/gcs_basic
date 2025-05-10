@@ -27,7 +27,4 @@ class ConnectionController(QObject):
     def update_view(self):
         """Update the header view with current connection state."""
         if self.header_view:
-            self.header_view.update_connection_status(
-                self.connection_model.data['status'],
-                self.connection_model.data['message']
-            )
+            self.header_view.update_view(self.connection_model.data)

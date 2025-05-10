@@ -8,6 +8,8 @@ class ConnectionModel(QObject):
     status_changed = Signal(str, str)  # status, message
     connection_established = Signal()
     connection_lost = Signal()
+    data_changed = Signal(dict)  # Emits the entire data dictionary
+    error_occurred = Signal(str)  # Emits error message
     
     def __init__(self, signal_manager):
         super().__init__()

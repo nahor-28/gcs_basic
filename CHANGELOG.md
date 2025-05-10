@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
     - HeaderView for connection controls
     - StatusView for system messages
     - MapView for position display
+    - ConnectionView for serial port selection and connection management
   - Created Controller layer:
     - VehicleController for telemetry operations
     - ConnectionController for connection management
@@ -27,6 +28,7 @@ All notable changes to this project will be documented in this file.
 - Enhanced header layout with better spacing and styling
 - Status message system with severity levels
 - Automatic port detection for serial connections
+- Improved connection interface with serial port selection
 
 ### Changed
 - Refactored application to use MVC pattern
@@ -42,6 +44,7 @@ All notable changes to this project will be documented in this file.
 - Removed arm/disarm functionality (temporarily)
 - Removed mode change functionality (temporarily)
 - Removed RC channel display
+- Refactored connection interface into dedicated ConnectionView
 
 ### Removed
 - Removed direct signal connections in favor of MVC pattern
