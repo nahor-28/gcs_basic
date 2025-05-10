@@ -124,109 +124,56 @@ class TelemetryView(BaseView):
     def connect_signals(self):
         """Connect signals to slots."""
         if self.signal_manager:
-            # Connect directly to telemetry updates
-            self.signal_manager.telemetry_update.connect(self.update_view)
+            self.signal_manager.vehicle_attitude_updated.connect(self.update_attitude_display)
+            self.signal_manager.vehicle_position_updated.connect(self.update_position_display)
+            self.signal_manager.vehicle_gps_updated.connect(self.update_gps_display)
+            self.signal_manager.vehicle_status_updated.connect(self.update_status_display)
     
-    def update_view(self, data):
-        """Update the telemetry display with new data."""
-        if not isinstance(data, dict):
-            return
-            
-        # Get message type from data
-        msg_type = data.get('type', '')
+    def update_attitude_display(self, attitude_data):
+        """Update attitude related labels."""
+        if 'roll' in attitude_data:
+            self.roll_label.setText(f"{attitude_data['roll']:.1f} deg")
+        if 'pitch' in attitude_data:
+            self.pitch_label.setText(f"{attitude_data['pitch']:.1f} deg")
+        if 'yaw' in attitude_data:
+            self.yaw_label.setText(f"{attitude_data['yaw']:.1f} deg")
+        if 'heading' in attitude_data:
+            self.heading_label.setText(f"{attitude_data['heading']:.1f} deg")
+
+    def update_position_display(self, position_data):
+        """Update position related labels and speed if it's included."""
+        if 'lat' in position_data:
+            self.lat_label.setText(f"{position_data['lat']:.7f}")
+        if 'lon' in position_data:
+            self.lon_label.setText(f"{position_data['lon']:.7f}")
+        if 'alt_msl' in position_data:
+            self.alt_label.setText(f"{position_data['alt_msl']:.1f} m")
+        if 'alt_agl' in position_data:
+            self.rel_alt_label.setText(f"{position_data['alt_agl']:.1f} m")
         
-        # Process by message type
-        if msg_type == 'ATTITUDE':
-            # Update attitude information
-            if 'roll' in data:
-                self.roll_label.setText(f"{data['roll']:.1f} deg")
-            if 'pitch' in data:
-                self.pitch_label.setText(f"{data['pitch']:.1f} deg")
-            if 'yaw' in data:
-                self.yaw_label.setText(f"{data['yaw']:.1f} deg")
-        
-        elif msg_type == 'VFR_HUD' and 'heading' in data:
-            # Update heading from VFR_HUD
-            self.heading_label.setText(f"{data['heading']:.1f} deg")
-                
-        elif msg_type == 'GLOBAL_POSITION_INT':
-            # Update position information
-            if 'lat' in data:
-                self.lat_label.setText(f"{data['lat']:.7f}")
-            if 'lon' in data:
-                self.lon_label.setText(f"{data['lon']:.7f}")
-            if 'alt_msl' in data:
-                self.alt_label.setText(f"{data['alt_msl']:.1f} m")
-            if 'alt_agl' in data:
-                self.rel_alt_label.setText(f"{data['alt_agl']:.1f} m")
-                
-        elif msg_type == 'SYS_STATUS':
-            # Update battery information
-            if 'battery_voltage' in data:
-                self.voltage_label.setText(f"{data['battery_voltage']:.2f} V")
-            if 'battery_current' in data:
-                current = data['battery_current']
-                if current is not None:
-                    self.current_label.setText(f"{current:.2f} A")
-            if 'battery_remaining' in data:
-                level = data['battery_remaining']
-                if level is not None:
-                    self.level_label.setText(f"{level}%")
-                
-        elif msg_type == 'VFR_HUD':
-            # Update speed information
-            if 'groundspeed' in data:
-                self.groundspeed_label.setText(f"{data['groundspeed']:.1f} m/s")
-            if 'airspeed' in data:
-                self.airspeed_label.setText(f"{data['airspeed']:.1f} m/s")
-            if 'climb_rate' in data:
-                self.climb_label.setText(f"{data['climb_rate']:.1f} m/s")
-        
-        # Process by nested data structure too (for the test script and compatibility)
-        self._process_structured_data(data)
-    
-    def _process_structured_data(self, data):
-        """Process data in the structured format (for test script compatibility)."""
-        # Update attitude
-        if 'attitude' in data:
-            attitude = data['attitude']
-            if 'roll' in attitude:
-                self.roll_label.setText(f"{attitude['roll']:.1f} deg")
-            if 'pitch' in attitude:
-                self.pitch_label.setText(f"{attitude['pitch']:.1f} deg")
-            if 'yaw' in attitude:
-                self.yaw_label.setText(f"{attitude['yaw']:.1f} deg")
-            if 'heading' in attitude:
-                self.heading_label.setText(f"{attitude['heading']:.1f} deg")
-                
-        # Update position
-        if 'position' in data:
-            position = data['position']
-            if 'lat' in position:
-                self.lat_label.setText(f"{position['lat']:.7f}")
-            if 'lon' in position:
-                self.lon_label.setText(f"{position['lon']:.7f}")
-            if 'alt' in position:
-                self.alt_label.setText(f"{position['alt']:.1f} m")
-            if 'relative_alt' in position:
-                self.rel_alt_label.setText(f"{position['relative_alt']:.1f} m")
-                
-        # Update battery
-        if 'battery' in data:
-            battery = data['battery']
-            if 'voltage' in battery:
-                self.voltage_label.setText(f"{battery['voltage']:.2f} V")
-            if 'current' in battery:
-                self.current_label.setText(f"{battery['current']:.2f} A")
-            if 'level' in battery:
-                self.level_label.setText(f"{battery['level']}%")
-                
-        # Update speed
-        if 'speed' in data:
-            speed = data['speed']
-            if 'groundspeed' in speed:
-                self.groundspeed_label.setText(f"{speed['groundspeed']:.1f} m/s")
-            if 'airspeed' in speed:
-                self.airspeed_label.setText(f"{speed['airspeed']:.1f} m/s")
-            if 'climb' in speed:
-                self.climb_label.setText(f"{speed['climb']:.1f} m/s")
+        if 'groundspeed' in position_data:
+            self.groundspeed_label.setText(f"{position_data['groundspeed']:.1f} m/s")
+        if 'airspeed' in position_data:
+            self.airspeed_label.setText(f"{position_data['airspeed']:.1f} m/s")
+        if 'climb_rate' in position_data:
+            self.climb_label.setText(f"{position_data['climb_rate']:.1f} m/s")
+
+    def update_gps_display(self, gps_data):
+        """Update GPS specific labels."""
+        if 'fix_type' in gps_data:
+            self.gps_fix_label.setText(f"{gps_data['fix_type']}")
+        if 'satellites_visible' in gps_data:
+            self.gps_sats_label.setText(f"{gps_data['satellites_visible']}")
+        if 'heading' in gps_data and not hasattr(self, 'heading_from_attitude'):
+             self.heading_label.setText(f"{gps_data['heading']:.1f} deg")
+
+    def update_status_display(self, status_data):
+        """Update status related labels (e.g., battery)."""
+        if 'battery_voltage' in status_data:
+            self.voltage_label.setText(f"{status_data['battery_voltage']:.2f} V")
+        if 'battery_current' in status_data:
+            current = status_data['battery_current']
+            self.current_label.setText(f"{current:.2f} A" if current is not None else "-- A")
+        if 'battery_remaining' in status_data:
+            level = status_data['battery_remaining']
+            self.level_label.setText(f"{level}%" if level is not None else "-- %")

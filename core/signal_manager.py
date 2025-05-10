@@ -13,10 +13,18 @@ class SignalManager(QObject):
     disconnect_request = Signal()  # No data
     reconnect_request = Signal()  # No data
 
-        # Status signals
+    # Status signals
     connection_status_changed = Signal(str, str)  # Data: status, message
     status_text_received = Signal(str, int)  # Data: text, severity
     
+    # Model-specific update signals
+    vehicle_attitude_updated = Signal(dict)
+    vehicle_position_updated = Signal(dict)
+    vehicle_gps_updated = Signal(dict)
+    vehicle_status_updated = Signal(dict) # For general vehicle status like arming, mode
+    connection_model_changed = Signal(dict)
+    status_model_new_message = Signal(dict)
+
     # Command signals (for future use)
     
     def __init__(self):

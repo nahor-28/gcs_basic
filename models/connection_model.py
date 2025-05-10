@@ -25,6 +25,11 @@ class ConnectionModel(BaseModel):
             self.signal_manager.disconnect_request.connect(self.handle_disconnect_request)
             self.signal_manager.reconnect_request.connect(self.handle_reconnect_request)
     
+    def _emit_model_changed(self):
+        """Emit a signal indicating the model's data has changed."""
+        if self.signal_manager:
+            self.signal_manager.connection_model_changed.emit(self.get_data())
+    
     def handle_connection_request(self, conn_string, baud_rate):
         """
         Handle a connection request.
@@ -37,49 +42,36 @@ class ConnectionModel(BaseModel):
         self.baud_rate = baud_rate
         self.connection_status = "CONNECTING"
         self.status_message = f"Connecting to {conn_string}..."
-        
-        # Notify about status change
-        if self.signal_manager:
-            self.signal_manager.connection_status_changed.emit(
-                self.connection_status, 
-                self.status_message
-            )
+        self._emit_model_changed()
     
     def handle_disconnect_request(self):
         """Handle a disconnect request."""
         self.connection_status = "DISCONNECTED"
         self.status_message = "Disconnected"
-        
-        # Notify about status change
-        if self.signal_manager:
-            self.signal_manager.connection_status_changed.emit(
-                self.connection_status, 
-                self.status_message
-            )
+        self._emit_model_changed()
     
     def handle_reconnect_request(self):
         """Handle a reconnect request."""
-        # Reuse existing connection parameters
-        self.handle_connection_request(self.connection_string, self.baud_rate)
+        self.connection_status = "CONNECTING" # Set to connecting before emitting
+        self.status_message = f"Reconnecting to {self.connection_string}..."
+        self._emit_model_changed() 
+        # Actual reconnect logic might be triggered by ConnectionController
+        # telling TelemetryManager to connect, which then updates status.
     
     def update_connection_status(self, status, message=""):
         """
-        Update the connection status.
-        
-        Args:
-            status: New connection status
-            message: Status message
+        Update the connection status. Called by ConnectionController or TelemetryManager.
         """
-        self.connection_status = status
-        if message:
+        changed = False
+        if self.connection_status != status:
+            self.connection_status = status
+            changed = True
+        if message and self.status_message != message:
             self.status_message = message
+            changed = True
         
-        # Notify about status change
-        if self.signal_manager:
-            self.signal_manager.connection_status_changed.emit(
-                self.connection_status, 
-                self.status_message
-            )
+        if changed:
+            self._emit_model_changed()
     
     def get_data(self):
         """
