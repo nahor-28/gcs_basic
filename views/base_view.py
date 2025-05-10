@@ -2,22 +2,33 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QObject
 
 class BaseView(QWidget):
-    """Base class for all views in the MVC architecture."""
+    """Base class for all views in the application."""
     
     def __init__(self, signal_manager=None):
+        """
+        Initialize the base view.
+        
+        Args:
+            signal_manager: The application's signal manager for communication
+        """
         super().__init__()
         self.signal_manager = signal_manager
         self.setup_ui()
         self.connect_signals()
         
     def setup_ui(self):
-        """Setup the UI components. To be implemented by subclasses."""
-        raise NotImplementedError("Subclasses must implement setup_ui()")
+        """Set up the UI components for this view."""
+        pass
         
     def connect_signals(self):
-        """Connect signals to slots. To be implemented by subclasses."""
-        raise NotImplementedError("Subclasses must implement connect_signals()")
+        """Connect signal handlers."""
+        pass
         
     def update_view(self, data):
-        """Update the view with new data. To be implemented by subclasses."""
-        raise NotImplementedError("Subclasses must implement update_view()") 
+        """
+        Update the view with new data.
+        
+        Args:
+            data: The data to update the view with
+        """
+        pass

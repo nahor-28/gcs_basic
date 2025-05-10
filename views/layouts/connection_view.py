@@ -1,118 +1,139 @@
 from PySide6.QtWidgets import (
-    QGroupBox, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QSizePolicy
+    QWidget, QHBoxLayout, QVBoxLayout, QPushButton, 
+    QLabel, QLineEdit, QComboBox, QFormLayout
 )
 from PySide6.QtCore import Qt, Signal
-import serial.tools.list_ports
+from views.base_view import BaseView
 
-class ConnectionView(QGroupBox):
+class ConnectionView(BaseView):
+    """Connection view component for managing vehicle connections."""
+    
     # Define signals
-    connect_clicked = Signal(str, str)  # connection_string, baud_rate
+    connect_clicked = Signal(str, int)  # connection_string, baud_rate
     disconnect_clicked = Signal()
     status_changed = Signal(str, str)  # status, message
     
     def __init__(self, signal_manager=None, parent=None):
-        super().__init__("", parent)
+        self.parent = parent
         self.signal_manager = signal_manager
-        self.setup_ui()
-        self.connect_signals()
-        
+        super().__init__(signal_manager)
+    
     def setup_ui(self):
-        """Creates and arranges the connection controls."""
-        layout = QHBoxLayout()
-        layout.setSpacing(10)  # Reduce spacing
-        layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
+        """Setup the connection UI components."""
+        # Create layout
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(5)  # Reduce spacing
         
-        # Connection input
-        self.connection_input = QComboBox()
-        self.connection_input.setEditable(True)
-        self.connection_input.setInsertPolicy(QComboBox.InsertPolicy.InsertAtBottom)
-        self.connection_input.setFixedWidth(150)
-        self.connection_input.setFixedHeight(30)
-        self.populate_ports()
-        layout.addWidget(self.connection_input)
+        # Connection string input - make it fixed width
+        self.conn_string_input = QLineEdit("udp:localhost:14550")
+        self.conn_string_input.setPlaceholderText("Connection String")
+        self.conn_string_input.setFixedWidth(180)  # Set fixed width
         
-        # Baud rate
-        self.baud_rate_combo = QComboBox()
-        self.baud_rate_combo.addItems(["57600", "115200", "921600"])
-        self.baud_rate_combo.setFixedWidth(80)
-        self.baud_rate_combo.setFixedHeight(30)
-        layout.addWidget(self.baud_rate_combo)
+        # Baud rate selection (for serial connections) - make it compact
+        self.baud_combo = QComboBox()
+        for baud in ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]:
+            self.baud_combo.addItem(baud)
+        self.baud_combo.setCurrentText("115200")
+        self.baud_combo.setFixedWidth(80)  # Set fixed width
         
-        # Connect button
+        # Create form layout for inputs
+        form_layout = QFormLayout()
+        form_layout.setContentsMargins(0, 0, 0, 0)  # Reduce margins
+        form_layout.setSpacing(2)  # Reduce spacing
+        form_layout.addRow("Connection:", self.conn_string_input)
+        form_layout.addRow("Baud Rate:", self.baud_combo)
+        
+        # Create buttons - make them smaller and fixed size
         self.connect_button = QPushButton("Connect")
-        self.connect_button.setFixedHeight(30)
-        layout.addWidget(self.connect_button)
+        self.connect_button.setFixedWidth(70)  # Set fixed width
+        self.disconnect_button = QPushButton("Disconnect")
+        self.disconnect_button.setFixedWidth(70)  # Set fixed width
+        self.disconnect_button.setEnabled(False)  # Initially disabled
         
-        self.setLayout(layout)
-        self.setFixedHeight(50)  # Fixed height for the entire layout
+        # Add buttons to layout
+        button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        button_layout.setSpacing(5)  # Reduce spacing
+        button_layout.addWidget(self.connect_button)
+        button_layout.addWidget(self.disconnect_button)
         
+        # Create wrapper layout
+        wrapper_layout = QVBoxLayout()
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        wrapper_layout.setSpacing(2)  # Reduce spacing
+        wrapper_layout.addLayout(form_layout)
+        wrapper_layout.addLayout(button_layout)
+        
+        # Add to main layout
+        main_layout.addLayout(wrapper_layout)
+        
+        # Set main layout
+        self.setLayout(main_layout)
+    
     def connect_signals(self):
         """Connect signals to slots."""
-        # Connect button click handler
-        self.connect_button.clicked.connect(self._handle_connect_click)
+        # Connect button signals
+        self.connect_button.clicked.connect(self._on_connect_clicked)
+        self.disconnect_button.clicked.connect(self._on_disconnect_clicked)
         
-        # Connect to signal manager if available
+        # Connect signal manager signals
         if self.signal_manager:
             self.signal_manager.connection_status_changed.connect(self._handle_connection_status)
-        
-    def populate_ports(self):
-        """Populates the connection combo box with available serial ports."""
-        try:
-            # Get list of serial ports
-            ports = [p.device for p in serial.tools.list_ports.comports()]
-            
-            # Add common UDP addresses
-            udp_ports = [
-                'udpin:localhost:14550',
-                'udpin:0.0.0.0:14550',
-                'udpout:localhost:14550',
-                'udpout:0.0.0.0:14550'
-            ]
-            
-            # Clear and add all ports
-            self.connection_input.clear()
-            self.connection_input.addItems(ports + udp_ports)
-            
-            # Set default to first UDP port
-            self.connection_input.setCurrentText('udpin:localhost:14550')
-            
-        except Exception as e:
-            print(f"Warning: Could not list serial ports - {e}")
-            # Add fallback options
-            self.connection_input.addItems([
-                'udpin:localhost:14550',
-                '/dev/ttyACM0',
-                'COM3'
-            ])
-            
-    def _handle_connection_status(self, status, message):
-        """Handle connection status changes from signal manager."""
-        print(f"ConnectionView received status: {status}, message: {message}")
-        is_connected = status == 'CONNECTED'
-        self.set_connected(is_connected)
-        # Emit status change to parent
-        self.status_changed.emit(status, message)
-            
-    def set_connected(self, connected: bool):
-        """Update the connect button state based on connection status."""
-        print(f"Setting connected state: {connected}")
-        if connected:
-            self.connect_button.setText("Disconnect")
-            self.connection_input.setEnabled(False)
-            self.baud_rate_combo.setEnabled(False)
-        else:
-            self.connect_button.setText("Connect")
-            self.connection_input.setEnabled(True)
-            self.baud_rate_combo.setEnabled(True)
-            
-    def _handle_connect_click(self):
+    
+    def _on_connect_clicked(self):
         """Handle connect button click."""
-        print(f"Connect button clicked, current text: {self.connect_button.text()}")
-        if self.connect_button.text() == "Connect":
-            self.connect_clicked.emit(
-                self.connection_input.currentText(),
-                self.baud_rate_combo.currentText()
-            )
+        conn_string = self.conn_string_input.text()
+        baud_rate = int(self.baud_combo.currentText())
+        
+        # Emit signal
+        self.connect_clicked.emit(conn_string, baud_rate)
+    
+    def _on_disconnect_clicked(self):
+        """Handle disconnect button click."""
+        # Emit signal
+        self.disconnect_clicked.emit()
+    
+    def _handle_connection_status(self, status, message):
+        """
+        Handle connection status changes.
+        
+        Args:
+            status: Connection status string
+            message: Status message
+        """
+        # Update button states based on connection status
+        if status == "CONNECTED":
+            self.connect_button.setEnabled(False)
+            self.disconnect_button.setEnabled(True)
+            self.conn_string_input.setEnabled(False)
+            self.baud_combo.setEnabled(False)
         else:
-            self.disconnect_clicked.emit() 
+            self.connect_button.setEnabled(True)
+            self.disconnect_button.setEnabled(False)
+            self.conn_string_input.setEnabled(True)
+            self.baud_combo.setEnabled(True)
+        
+        # Emit status changed signal
+        self.status_changed.emit(status, message)
+    
+    def update_view(self, data):
+        """
+        Update the view with connection data.
+        
+        Args:
+            data: Connection data dictionary
+        """
+        if not isinstance(data, dict):
+            return
+            
+        # Update connection string and baud rate
+        if 'connection_string' in data:
+            self.conn_string_input.setText(data['connection_string'])
+        
+        if 'baud_rate' in data:
+            self.baud_combo.setCurrentText(str(data['baud_rate']))
+        
+        # Update connection status
+        if 'status' in data and 'message' in data:
+            self._handle_connection_status(data['status'], data['message'])

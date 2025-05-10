@@ -1,10 +1,7 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTextEdit,
-    QLabel, QScrollArea
+    QWidget, QVBoxLayout, QTextEdit, QGroupBox
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QTextCursor
-
 from views.base_view import BaseView
 
 class StatusView(BaseView):
@@ -12,82 +9,77 @@ class StatusView(BaseView):
     
     def __init__(self, signal_manager):
         super().__init__(signal_manager)
-        self.max_messages = 100  # Maximum number of messages to keep
-        
+    
     def setup_ui(self):
         """Setup the status UI components."""
-        layout = QVBoxLayout(self)
+        # Create layout
+        main_layout = QVBoxLayout()
         
-        # Create title label
-        title = QLabel("Status Messages")
-        title.setStyleSheet("font-weight: bold;")
-        layout.addWidget(title)
+        # Create group box
+        group = QGroupBox("System Status")
+        group_layout = QVBoxLayout()
         
-        # Create text edit for messages
-        self.message_area = QTextEdit()
-        self.message_area.setReadOnly(True)
-        self.message_area.setMaximumHeight(150)
-        self.message_area.setStyleSheet("""
-            QTextEdit {
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                border-radius: 3px;
-            }
-        """)
+        # Create text display
+        self.status_text = QTextEdit()
+        self.status_text.setReadOnly(True)
+        self.status_text.setMaximumHeight(100)
+        group_layout.addWidget(self.status_text)
         
-        # Add message area to layout
-        layout.addWidget(self.message_area)
+        # Set group layout
+        group.setLayout(group_layout)
         
+        # Add group to main layout
+        main_layout.addWidget(group)
+        
+        # Set main layout
+        self.setLayout(main_layout)
+    
     def connect_signals(self):
         """Connect signals to slots."""
-        # No direct signal connections needed as updates come through update_view
-        pass
+        if self.signal_manager:
+            self.signal_manager.status_text_received.connect(self.add_status_message)
+    
+    def add_status_message(self, text, severity=0):
+        """
+        Add a new status message to the display.
         
-    def update_view(self, data):
-        """Update the status display with new data."""
-        if isinstance(data, dict):
-            if data.get("type") == "STATUSTEXT":
-                text = data.get("text", "")
-                severity = data.get("severity", 0)
-                self.add_message(text, severity)
-            elif data.get("type") == "messages":
-                # Clear existing messages
-                self.message_area.clear()
-                # Add all messages
-                for message in data.get("data", []):
-                    self.add_message(message.get("text", ""), message.get("severity", 0))
-            
-    def add_message(self, text, severity):
-        """Add a new status message with appropriate formatting."""
-        # Create color based on severity
-        color = self._get_severity_color(severity)
+        Args:
+            text: Message text
+            severity: Message severity (0=info, 1=warning, 2=error)
+        """
+        # Determine message color based on severity
+        color = "black"
+        if severity == 1:
+            color = "orange"
+        elif severity == 2:
+            color = "red"
         
-        # Format the message
-        formatted_text = f'<span style="color: {color};">{text}</span><br>'
+        # Format and add message
+        message = f'<font color="{color}">[{severity}] {text}</font><br>'
+        self.status_text.insertHtml(message)
         
-        # Add message to text area
-        self.message_area.append(formatted_text)
-        
-        # Limit the number of messages
-        if self.message_area.document().blockCount() > self.max_messages:
-            cursor = self.message_area.textCursor()
-            cursor.movePosition(QTextCursor.Start)
-            cursor.movePosition(QTextCursor.Down, QTextCursor.KeepAnchor)
-            cursor.removeSelectedText()
-            
         # Scroll to bottom
-        self.message_area.verticalScrollBar().setValue(
-            self.message_area.verticalScrollBar().maximum()
-        )
+        scrollbar = self.status_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+    
+    def update_view(self, data):
+        """
+        Update the view with status data.
         
-    def _get_severity_color(self, severity):
-        """Get color based on message severity."""
-        # MAVLink severity levels
-        if severity <= 1:  # EMERGENCY, ALERT, CRITICAL
-            return "#FF0000"  # Red
-        elif severity <= 3:  # ERROR, WARNING
-            return "#FFA500"  # Orange
-        elif severity <= 5:  # NOTICE, INFO
-            return "#0000FF"  # Blue
-        else:  # DEBUG
-            return "#808080"  # Gray 
+        Args:
+            data: List of status messages
+        """
+        if not isinstance(data, list):
+            return
+            
+        # Clear existing messages
+        self.status_text.clear()
+        
+        # Add messages in reverse order (newest at the bottom)
+        for message in reversed(data):
+            severity = message.get('severity', 0)
+            text = message.get('text', '')
+            timestamp = message.get('timestamp', '')
+            
+            # Format and add message
+            self.add_status_message(f"[{timestamp}] {text}", severity)

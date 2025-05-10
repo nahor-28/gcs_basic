@@ -1,32 +1,30 @@
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QMessageBox, QSizePolicy
+    QWidget, QHBoxLayout, QLabel, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal
-
 from core.signal_manager import SignalManager
 from views.base_view import BaseView
-from .connection_view import ConnectionView
+from views.layouts.connection_view import ConnectionView
 
 class HeaderView(BaseView):
-    """Header view component for the GCS application."""
-    
-    # View signals
-    connect_requested = Signal(str, int)  # connection_string, baud_rate
-    disconnect_requested = Signal()
+    """Header view component for the application."""
     
     def __init__(self, signal_manager: SignalManager):
         super().__init__(signal_manager)
-        self.setup_ui()
-        self.connect_signals()
     
     def setup_ui(self):
-        """Creates and arranges the header layout."""
+        """Setup the header UI components."""
+        # Create layout
         layout = QHBoxLayout()
+        layout.setContentsMargins(10, 5, 10, 5)
         layout.setSpacing(10)
-        layout.setContentsMargins(5, 5, 5, 5)
         
-        # Connection controls
+        # Add logo or title
+        title_label = QLabel("GCS - MVC Architecture")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title_label)
+        
+        # Add connection view
         self.connection_view = ConnectionView(signal_manager=self.signal_manager)
         layout.addWidget(self.connection_view)
         
@@ -48,7 +46,7 @@ class HeaderView(BaseView):
         
     def update_view(self, data):
         """Update the view based on the provided data."""
-        print(f"HeaderView received data: {data}")
+        # print(f"HeaderView received data: {data}")
         
         if isinstance(data, dict):
             # Update status label
@@ -58,7 +56,7 @@ class HeaderView(BaseView):
             
     def update_connection_status(self, status, message=""):
         """Update the connection status display."""
-        print(f"HeaderView updating status: {status}, message: {message}")  # Debug print
+        # print(f"HeaderView updating status: {status}, message: {message}")  # Debug print
         status_text = f"Status: {status}"
         if message:
             status_text += f" - {message}"
@@ -66,12 +64,12 @@ class HeaderView(BaseView):
             
     def on_connect_clicked(self, connection_string, baud_rate):
         """Handle connect button click."""
-        try:
-            baud = int(baud_rate)
-            self.connect_requested.emit(connection_string, baud)
-        except ValueError:
-            QMessageBox.critical(self, "Connection Error", "Please select a valid baud rate.")
-            
+        if self.signal_manager:
+            # Forward the connection request to the signal manager
+            self.signal_manager.connection_request.emit(connection_string, baud_rate)
+    
     def on_disconnect_clicked(self):
         """Handle disconnect button click."""
-        self.disconnect_requested.emit() 
+        if self.signal_manager:
+            # Forward the disconnect request to the signal manager
+            self.signal_manager.disconnect_request.emit()

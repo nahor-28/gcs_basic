@@ -10,7 +10,10 @@ from models.connection_model import ConnectionModel
 from models.status_model import StatusModel
 
 # Import views
-from views.main_view import MainView
+from views.layouts.telemetry_view import TelemetryView
+from views.layouts.header_view import HeaderView
+from views.layouts.status_view import StatusView
+from views.layouts.map_view import MapView
 
 # Import controllers
 from controllers.vehicle_controller import VehicleController
@@ -24,6 +27,11 @@ class MVCApplication(QMainWindow):
         super().__init__()
         self.setWindowTitle("GCS - MVC Architecture")
         self.resize(1200, 800)
+        
+        # Create central widget and layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout(central_widget)
         
         # Initialize signal manager
         self.signal_manager = SignalManager()
@@ -40,24 +48,32 @@ class MVCApplication(QMainWindow):
         self.connection_model = ConnectionModel(self.signal_manager)
         self.status_model = StatusModel(self.signal_manager)
         
-        # Create main view
-        self.main_view = MainView(self.signal_manager)
-        self.setCentralWidget(self.main_view)
+        # Create views
+        self.header_view = HeaderView(self.signal_manager)
+        self.telemetry_view = TelemetryView(self.signal_manager)
+        self.map_view = MapView(self.signal_manager)
+        self.status_view = StatusView(self.signal_manager)
+        
+        # Add views to layout
+        layout.addWidget(self.header_view)
+        layout.addWidget(self.telemetry_view)
+        layout.addWidget(self.map_view)
+        layout.addWidget(self.status_view)
         
         # Create controllers
         self.vehicle_controller = VehicleController(
             self.vehicle_model,
-            self.main_view.telemetry_view,
+            self.telemetry_view,
             self.signal_manager
         )
         self.connection_controller = ConnectionController(
             self.connection_model,
-            self.main_view.header_view,
+            self.header_view,
             self.signal_manager
         )
         self.status_controller = StatusController(
             self.status_model,
-            self.main_view.status_view,
+            self.status_view,
             self.signal_manager
         )
         

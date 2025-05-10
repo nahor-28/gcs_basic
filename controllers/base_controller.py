@@ -1,24 +1,25 @@
-from PySide6.QtCore import QObject
-
-class BaseController(QObject):
-    """Base class for all controllers in the MVC architecture."""
+class BaseController:
+    """Base class for all controllers in the application."""
     
-    def __init__(self, model, view, signal_manager=None):
-        super().__init__()
+    def __init__(self, model=None, view=None, signal_manager=None):
+        """
+        Initialize the base controller.
+        
+        Args:
+            model: The model this controller will use
+            view: The view this controller will update
+            signal_manager: The application's signal manager for communication
+        """
         self.model = model
         self.view = view
         self.signal_manager = signal_manager
-        self._connect_signals()
+        self.connect_signals()
         
-    def _connect_signals(self):
-        """Connect model and view signals. Override in subclasses."""
+    def connect_signals(self):
+        """Connect signal handlers."""
         pass
         
     def update_view(self):
-        """Update the view with current model data. Override in subclasses."""
-        pass
-        
-    def handle_error(self, error_message):
-        """Handle errors from the model. Override in subclasses."""
-        if self.signal_manager:
-            self.signal_manager.status_message.emit(error_message, 3)  # ERROR severity 
+        """Update the view with current model data."""
+        if self.model and self.view:
+            self.view.update_view(self.model.get_data())

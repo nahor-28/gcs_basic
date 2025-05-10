@@ -9,7 +9,7 @@ import logging
 from PySide6.QtCore import QObject, QThread, Signal, QTimer
 
 # Import the global event bus instance and Events class
-from utils.event_bus import event_bus, Events
+# from utils.event_bus import event_bus, Events
 
 class TelemetryThread(QThread):
     """Thread for receiving telemetry data."""
