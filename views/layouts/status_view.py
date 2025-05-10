@@ -37,49 +37,27 @@ class StatusView(BaseView):
     def connect_signals(self):
         """Connect signals to slots."""
         if self.signal_manager:
-            self.signal_manager.status_text_received.connect(self.add_status_message)
+            # Listen to the new model signal that carries a new message dictionary
+            self.signal_manager.status_model_new_message.connect(self._add_new_status_message)
     
-    def add_status_message(self, text, severity=0):
+    def _add_new_status_message(self, message_data: dict):
         """
-        Add a new status message to the display.
+        Add a new status message (received as a dict) to the display.
         
         Args:
-            text: Message text
-            severity: Message severity (0=info, 1=warning, 2=error)
+            message_data: Dictionary containing message details (text, severity, timestamp).
         """
-        # Determine message color based on severity
+        text = message_data.get('text', '')
+        severity = message_data.get('severity', 0)
+        timestamp = message_data.get('timestamp', '') # Or format it if needed
+
         color = "black"
-        if severity == 1:
-            color = "orange"
-        elif severity == 2:
-            color = "red"
+        if severity == 1: color = "orange"
+        elif severity == 2: color = "red"
         
-        # Format and add message
-        message = f'<font color="{color}">[{severity}] {text}</font><br>'
-        self.status_text.insertHtml(message)
+        # Format and add message including timestamp if available
+        prefix = f"[{timestamp}] " if timestamp else ""
+        formatted_message = f'<font color="{color}">{prefix}[{severity}] {text}</font><br>'
         
-        # Scroll to bottom
-        scrollbar = self.status_text.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
-    
-    def update_view(self, data):
-        """
-        Update the view with status data.
-        
-        Args:
-            data: List of status messages
-        """
-        if not isinstance(data, list):
-            return
-            
-        # Clear existing messages
-        self.status_text.clear()
-        
-        # Add messages in reverse order (newest at the bottom)
-        for message in reversed(data):
-            severity = message.get('severity', 0)
-            text = message.get('text', '')
-            timestamp = message.get('timestamp', '')
-            
-            # Format and add message
-            self.add_status_message(f"[{timestamp}] {text}", severity)
+        self.status_text.insertHtml(formatted_message)
+        self.status_text.verticalScrollBar().setValue(self.status_text.verticalScrollBar().maximum())

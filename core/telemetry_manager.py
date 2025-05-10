@@ -43,7 +43,7 @@ class TelemetryThread(QThread):
                     errmsg = "Connection object is None."
                 else: 
                     errmsg = "Connection lost (target system 0)."
-                self.signal_manager.connection_status_changed.emit("DISCONNECTED", errmsg)
+                self.signal_manager.connection_status_changed.emit("DISCONNECTED", errmsg, "")
                 active_connection = False
                 continue
                 
@@ -52,11 +52,14 @@ class TelemetryThread(QThread):
                 current_time = time.time()
                 if current_time - self.last_heartbeat_time > self.HEARTBEAT_TIMEOUT:
                     errmsg = f"No heartbeat received for {self.HEARTBEAT_TIMEOUT} seconds"
-                    self.signal_manager.connection_status_changed.emit("RECONNECTING", errmsg)
+                    self.signal_manager.connection_status_changed.emit("RECONNECTING", errmsg, "")
                     active_connection = False
-                    # Signal the TelemetryManager to attempt reconnection
-                    if hasattr(self.signal_manager, 'reconnect_request'):
-                        self.signal_manager.reconnect_request.emit()
+                    
+                    # Instead of emitting the signal, call the parent TelemetryManager
+                    # Get a reference to the parent TelemetryManager
+                    telemetry_manager = self.parent()
+                    if telemetry_manager and hasattr(telemetry_manager, 'attempt_reconnect'):
+                        telemetry_manager.attempt_reconnect()
                     continue
                 
                 # Receive ANY message
@@ -83,7 +86,7 @@ class TelemetryThread(QThread):
                     # If connection was lost, receiving heartbeat means it's back
                     if self.reconnect_attempts > 0:
                         self.reconnect_attempts = 0  # Reset reconnect attempts
-                        self.signal_manager.connection_status_changed.emit("CONNECTED", "Reconnected via Heartbeat")
+                        self.signal_manager.connection_status_changed.emit("CONNECTED", "Reconnected via Heartbeat", "")
                     
                 elif msg_type == 'SYS_STATUS':
                     data['battery_voltage'] = msg.voltage_battery / 1000.0
@@ -138,7 +141,7 @@ class TelemetryThread(QThread):
                     
             except (ConnectionResetError, BrokenPipeError) as conn_e:
                 errmsg = f"{type(conn_e).__name__} in receive loop."
-                self.signal_manager.connection_status_changed.emit("ERROR", errmsg)
+                self.signal_manager.connection_status_changed.emit("ERROR", errmsg, "")
                 active_connection = False  # Stop loop
                 
             except Exception as e:
@@ -198,23 +201,25 @@ class TelemetryManager(QObject):
         if signal_manager:
             signal_manager.connection_request.connect(self.handle_connect_request)
             signal_manager.disconnect_request.connect(self.handle_disconnect_request)
-            signal_manager.reconnect_request.connect(self.attempt_reconnect)
             logging.info("TelemetryManager connected to signal manager.")
             
     def _update_status(self, new_status: str, message: str = ""):
         """Updates internal status and emits a status change signal."""
-        if new_status != self.current_status:
+        print(f"DEBUG: TelemetryManager._update_status: Attempting to set status to '{new_status}' with message '{message}'") 
+        # Ensure change if message is different OR status is different
+        if new_status != self.current_status or (message and message != getattr(self, 'status_message', '')):
             self.current_status = new_status
+            self.status_message = message # Store the message with the status
             logging.info(f"Connection Status: {new_status} - {message}")
+            print(f"DEBUG: TelemetryManager._update_status: Emitting connection_status_changed: '{new_status}', '{message}', conn_str: '{self._connection_string}'")
             if self.signal_manager:
-                self.signal_manager.connection_status_changed.emit(new_status, message)
-        elif message:  # Emit even if status is same, if there's a new message
-            logging.info(f"Connection Status Info: {message}")
-            if self.signal_manager:
-                self.signal_manager.connection_status_changed.emit(self.current_status, message)
+                self.signal_manager.connection_status_changed.emit(new_status, message, self._connection_string)
+        else:
+            print(f"DEBUG: TelemetryManager._update_status: Status '{new_status}' and message '{message}' did not change internal state. Current status: '{self.current_status}', current message: '{getattr(self, 'status_message', '')}'")
                 
     def connect(self):
         """Establishes the MAVLink connection using internal connection string/_baud."""
+        print(f"DEBUG: TelemetryManager.connect called. self._is_connecting={self._is_connecting}, self.master is None: {self.master is None}")
         if self._is_connecting:
             logging.info("Connection attempt already in progress.")
             return False
@@ -243,32 +248,30 @@ class TelemetryManager(QObject):
             if not self.master:
                 self._update_status("ERROR", "mavutil.mavlink_connection failed")
                 self._is_connecting = False
+                print("DEBUG: TelemetryManager.connect: mavutil.mavlink_connection failed.")
                 return False
                 
             self._update_status("CONNECTING", "Waiting for heartbeat...")
-            heartbeat = self.master.wait_heartbeat(timeout=10)
+            print("DEBUG: TelemetryManager.connect: Waiting for heartbeat...")
+            heartbeat = self.master.wait_heartbeat(timeout=10) # Default MAVUtil timeout is 5s, can be increased
             
             if heartbeat:
-                msg = f"Heartbeat received (Sys:{self.master.target_system}/Comp:{self.master.target_component})"
-                self._update_status("CONNECTED", msg)
+                print(f"DEBUG: TelemetryManager.connect: Heartbeat received: {heartbeat}")
+                self._update_status("CONNECTED", f"Connected to target {self.master.target_system}/{self.master.target_component}")
                 self._is_connecting = False
                 return True
             else:
-                self._update_status("ERROR", "Heartbeat timed out")
-                if self.master: 
-                    self.master.close()
+                print("DEBUG: TelemetryManager.connect: No heartbeat received within timeout.")
+                self._update_status("ERROR", "No heartbeat received within timeout.")
+                if self.master: self.master.close()
                 self.master = None
                 self._is_connecting = False
                 return False
                 
         except Exception as e:
-            errmsg = f"Connection failed: {type(e).__name__}: {e}"
-            self._update_status("ERROR", errmsg)
-            if self.master: 
-                try:
-                    self.master.close()
-                except Exception as close_e:
-                    logging.error(f"Error closing connection after failure: {close_e}")
+            print(f"DEBUG: TelemetryManager.connect: Exception occurred: {e}")
+            self._update_status("ERROR", f"Connection failed: {e}")
+            if self.master: self.master.close()
             self.master = None
             self._is_connecting = False
             return False
@@ -316,6 +319,8 @@ class TelemetryManager(QObject):
             
         self.stop_event.clear()
         self.thread = TelemetryThread(self.master, self.signal_manager, self.stop_event)
+        # Set the TelemetryManager as the parent of the thread
+        self.thread.setParent(self)
         self.thread.start()
         logging.info("Telemetry thread started.")
         return True

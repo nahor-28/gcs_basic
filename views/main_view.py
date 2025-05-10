@@ -72,30 +72,35 @@ class MainView(BaseView):
     
     def connect_signals(self):
         """Connect signals to slots."""
-        # Connect to signals from signal manager
-        # Use lambda to allow distinguishing between signal-driven updates and direct calls
-        self.signal_manager.telemetry_update.connect(
-            lambda data: self.update_telemetry(data, from_signal=True)
-        )
-        self.signal_manager.connection_status_changed.connect(self.update_connection_status)
-        self.signal_manager.status_text_received.connect(self.update_status_message)
+        # VehicleController listens to telemetry_update to update VehicleModel.
+        # TelemetryView and MapView listen to specific model update signals (e.g., vehicle_position_updated).
+        # So, MainView no longer needs to connect to telemetry_update directly.
+        # self.signal_manager.telemetry_update.connect(
+        #     lambda data: self.update_telemetry(data, from_signal=True)
+        # )
+        
+        # StatusModel should ideally listen to status_text_received if it needs to process these.
+        # StatusView listens to status_model_new_message.
+        # Removing the connection here as the current update_status_message is a no-op.
+        # If StatusModel is not yet handling status_text_received, this might mean
+        # raw status texts are not displayed. This points to a needed change in StatusModel.
+        # self.signal_manager.status_text_received.connect(self.update_status_message)
+        pass # No connections needed in MainView connect_signals for now
     
-    def update_telemetry(self, data, from_signal=False):
-        """Update telemetry display with new data."""
-        # Update telemetry view
-        self.telemetry_view.update_view(data)
-        # Update map
-        self.map_view.update_view(data)
-    
-    def update_connection_status(self, status, message):
-        """Update the connection status."""
-        # Update header view
-        self.header_view.update_connection_status(status, message)
-    
-    def update_status_message(self, text, severity):
-        """Update status message display."""
-        # Status view handles this directly through its signal connection
-        pass
+    # Remove update_telemetry as TelemetryView and MapView should be event-driven from model signals
+    # def update_telemetry(self, data, from_signal=False):
+    #     """Update telemetry display with new data."""
+    #     # Update telemetry view
+    #     # self.telemetry_view.update_view(data) # TelemetryView now uses specific model signals
+    #     # Update map
+    #     # self.map_view.update_view(data) # MapView should also use specific model signals
+
+    # Remove update_status_message as it's a no-op and StatusView handles its own updates.
+    # StatusModel should be responsible for processing raw status texts if needed.
+    # def update_status_message(self, text, severity):
+    #     """Update status message display."""
+    #     # Status view handles this directly through its signal connection
+    #     pass
     
     def update_view(self, data):
         """Update the view with new data."""

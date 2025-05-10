@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from core.signal_manager import SignalManager
 from views.base_view import BaseView
 from views.layouts.connection_view import ConnectionView
@@ -20,16 +20,16 @@ class HeaderView(BaseView):
         layout.setSpacing(10)
         
         # Add logo or title
-        title_label = QLabel("GCS - MVC Architecture")
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
-        layout.addWidget(title_label)
+        # title_label = QLabel("GCS - Observer MVC")
+        # title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        # layout.addWidget(title_label)
         
         # Add connection view
         self.connection_view = ConnectionView(signal_manager=self.signal_manager)
         layout.addWidget(self.connection_view)
         
         # Status label
-        self.status_label = QLabel("Not Connected")
+        self.status_label = QLabel("Status: DISCONNECTED")
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.status_label)
@@ -42,24 +42,40 @@ class HeaderView(BaseView):
         # Connect view signals
         self.connection_view.connect_clicked.connect(self.on_connect_clicked)
         self.connection_view.disconnect_clicked.connect(self.on_disconnect_clicked)
-        self.connection_view.status_changed.connect(self.update_connection_status)
         
-    def update_view(self, data):
-        """Update the view based on the provided data."""
-        # print(f"HeaderView received data: {data}")
+        # HeaderView itself listens to connection_model_changed to update its status_label
+        if self.signal_manager:
+            self.signal_manager.connection_model_changed.connect(self._update_status_label_from_model)
         
-        if isinstance(data, dict):
-            # Update status label
-            status = data.get('status', 'Not Connected')
-            message = data.get('message', '')
-            self.update_connection_status(status, message)
-            
-    def update_connection_status(self, status, message=""):
-        """Update the connection status display."""
-        # print(f"HeaderView updating status: {status}, message: {message}")  # Debug print
-        status_text = f"Status: {status}"
-        if message:
-            status_text += f" - {message}"
+    def _update_status_label_from_model(self, model_data: dict):
+        """Update the connection status display based on model data."""
+        status = model_data.get('status', 'UNKNOWN')
+        message = model_data.get('message', '')
+        conn_str = model_data.get('connection_string', '-')
+
+        if status == "CONNECTED":
+            status_text = f"Status: CONNECTED to {conn_str}"
+        elif status == "CONNECTING":
+            status_text = f"Status: CONNECTING to {conn_str}..."
+            if message: # Add specific message if available (e.g. "Waiting for heartbeat")
+                status_text = f"Status: CONNECTING - {message}"
+        elif status == "RECONNECTING":
+            status_text = f"Status: RECONNECTING to {conn_str}..."
+            if message: 
+                status_text = f"Status: RECONNECTING - {message}"
+        elif status == "DISCONNECTED":
+            status_text = "Status: DISCONNECTED"
+            if message and message != "Disconnected": # Show specific disconnect message if not generic
+                 status_text = f"Status: DISCONNECTED - {message}"
+        elif status == "ERROR":
+            status_text = f"Status: ERROR"
+            if message:
+                status_text += f" - {message}"
+        else: # Catch any other statuses
+            status_text = f"Status: {status}"
+            if message:
+                status_text += f" - {message}"
+
         self.status_label.setText(status_text)
             
     def on_connect_clicked(self, connection_string, baud_rate):

@@ -11,10 +11,9 @@ class SignalManager(QObject):
     # Connection signals
     connection_request = Signal(str, int)  # Data: conn_string, baud
     disconnect_request = Signal()  # No data
-    reconnect_request = Signal()  # No data
 
     # Status signals
-    connection_status_changed = Signal(str, str)  # Data: status, message
+    connection_status_changed = Signal(str, str, str)  # Data: status, message, actual_conn_string
     status_text_received = Signal(str, int)  # Data: text, severity
     
     # Model-specific update signals
