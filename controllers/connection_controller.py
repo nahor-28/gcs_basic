@@ -1,19 +1,25 @@
 from controllers.base_controller import BaseController
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ConnectionController(BaseController):
     """Controller for connection-related operations."""
     
     def __init__(self, connection_model, view=None, signal_manager=None):
         super().__init__(connection_model, view, signal_manager)
+        self.connect_signals()
+        logger.info("ConnectionController initialized")
     
     def connect_signals(self):
         """Connect signal handlers."""
         if self.signal_manager:
             # Connect to connection request signals
-            self.signal_manager.connection_request.connect(self.handle_connection_request)
-            self.signal_manager.disconnect_request.connect(self.handle_disconnect_request)
+            self.signal_manager.connection_request.connect(self._handle_connection_request)
+            self.signal_manager.disconnect_request.connect(self._handle_disconnect_request)
+            logger.debug("ConnectionController: Connected to signals")
     
-    def handle_connection_request(self, conn_string, baud_rate):
+    def _handle_connection_request(self, conn_string, baud_rate):
         """
         Handle connection request.
         
@@ -21,20 +27,20 @@ class ConnectionController(BaseController):
             conn_string: Connection string (e.g., 'udp:localhost:14550')
             baud_rate: Baud rate for serial connections
         """
-        print(f"ConnectionController: Received connection request for {conn_string} at {baud_rate} baud")
+        logger.info(f"ConnectionController: Received connection request for {conn_string} at {baud_rate} baud")
         
-        # Update the model's state to "CONNECTING"
-        if self.model:
+        # Only update model if we're not already connected
+        if not (self.model and self.model.connection_status == "CONNECTED"):
             self.model.handle_connection_request(conn_string, baud_rate)
         
         # We don't need to directly emit the signal here as the HeaderView that receives
         # the UI button click already emits connection_request
     
-    def handle_disconnect_request(self):
+    def _handle_disconnect_request(self):
         """
         Handle disconnect request.
         """
-        print("ConnectionController: Received disconnect request")
+        logger.info("ConnectionController: Received disconnect request")
         
         # Update the model's state
         if self.model:

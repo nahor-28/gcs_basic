@@ -1,4 +1,5 @@
 import sys
+import logging
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout
 from core.signal_manager import SignalManager
 from core.telemetry_manager import TelemetryManager
@@ -16,6 +17,13 @@ from controllers.vehicle_controller import VehicleController
 from controllers.connection_controller import ConnectionController
 from controllers.status_controller import StatusController
 
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 class MVCApplication(QMainWindow):
     """Main application class that integrates all MVC components."""
     
@@ -23,6 +31,8 @@ class MVCApplication(QMainWindow):
         super().__init__()
         self.setWindowTitle("GCS - Observer MVC Architecture")
         self.resize(1200, 800)
+        
+        logger.debug("Initializing MVCApplication components")
         
         self.signal_manager = SignalManager()
         
@@ -55,19 +65,23 @@ class MVCApplication(QMainWindow):
             self.signal_manager
         )
         
+        logger.debug("All MVCApplication components initialized")
         self._initialize_ui()
         
     def _initialize_ui(self):
         self.show()
         self.status_model.add_message("Application initialized (Event-Driven)", 0)
+        logger.debug("MVCApplication UI initialized")
         
     def closeEvent(self, event):
+        logger.debug("MVCApplication closing")
         if self.telemetry_manager:
             self.telemetry_manager.stop()
         self.status_model.add_message("Application closing", 0)
         event.accept()
 
 def main():
+    logger.info("Starting GCS Basic application")
     app = QApplication(sys.argv)
     window = MVCApplication()
     return app.exec()

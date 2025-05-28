@@ -2,15 +2,20 @@ from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QSizePolicy
 )
 from PySide6.QtCore import Qt
+import logging
 from core.signal_manager import SignalManager
 from views.base_view import BaseView
 from views.layouts.connection_view import ConnectionView
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 class HeaderView(BaseView):
     """Header view component for the application."""
     
     def __init__(self, signal_manager: SignalManager):
         super().__init__(signal_manager)
+        logger.debug("HeaderView initialized")
     
     def setup_ui(self):
         """Setup the header UI components."""
@@ -36,6 +41,7 @@ class HeaderView(BaseView):
         
         self.setLayout(layout)
         self.setFixedHeight(50)
+        logger.debug("HeaderView UI setup complete")
         
     def connect_signals(self):
         """Connect signals to slots."""
@@ -45,10 +51,15 @@ class HeaderView(BaseView):
         
         # HeaderView itself listens to connection_model_changed to update its status_label
         if self.signal_manager:
+            logger.debug("HeaderView: Connecting to connection_model_changed signal")
             self.signal_manager.connection_model_changed.connect(self._update_status_label_from_model)
+        else:
+            logger.error("HeaderView: No signal_manager available for signal connections")
         
     def _update_status_label_from_model(self, model_data: dict):
         """Update the connection status display based on model data."""
+        logger.debug(f"HeaderView: Received connection_model_changed with data: {model_data}")
+        
         status = model_data.get('status', 'UNKNOWN')
         message = model_data.get('message', '')
         conn_str = model_data.get('connection_string', '-')
@@ -76,16 +87,19 @@ class HeaderView(BaseView):
             if message:
                 status_text += f" - {message}"
 
+        logger.debug(f"HeaderView: Setting status label to: {status_text}")
         self.status_label.setText(status_text)
             
     def on_connect_clicked(self, connection_string, baud_rate):
         """Handle connect button click."""
         if self.signal_manager:
+            logger.debug(f"HeaderView: Emitting connection_request with {connection_string}, {baud_rate}")
             # Forward the connection request to the signal manager
             self.signal_manager.connection_request.emit(connection_string, baud_rate)
     
     def on_disconnect_clicked(self):
         """Handle disconnect button click."""
         if self.signal_manager:
+            logger.debug("HeaderView: Emitting disconnect_request")
             # Forward the disconnect request to the signal manager
             self.signal_manager.disconnect_request.emit()
