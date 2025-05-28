@@ -26,9 +26,9 @@ def get_connection_strings():
     """
     # Standard connection strings
     conn_strings = [
-        "udp:localhost:14550",
-        "udp:localhost:14551",
-        "tcp:localhost:5760"
+        "udp:0.0.0.0:14550",
+        "udp:0.0.0.0:14551",
+        "tcp:0.0.0.0:5760"
     ]
     
     # Add available serial ports

@@ -137,7 +137,13 @@ class TelemetryThread(QThread):
                 # --- Publish TELEMETRY_UPDATE event ---
                 # Check len > 2 ensures type and timestamp are present plus actual data
                 if publish_event and len(data) > 2:
+                    logging.debug(f"TelemetryManager: Emitting telemetry_update signal with data: {data}")
                     self.signal_manager.telemetry_update.emit(data)
+                    logging.debug(f"TelemetryManager: telemetry_update signal emitted for message type: {msg_type}")
+                elif publish_event:
+                    logging.warning(f"TelemetryManager: Skipping telemetry_update emission - insufficient data: {data}")
+                else:
+                    logging.debug(f"TelemetryManager: Skipping telemetry_update emission - publish_event=False for message type: {msg_type}")
                     
             except (ConnectionResetError, BrokenPipeError) as conn_e:
                 errmsg = f"{type(conn_e).__name__} in receive loop."
@@ -253,7 +259,7 @@ class TelemetryManager(QObject):
                 
             self._update_status("CONNECTING", "Waiting for heartbeat...")
             print("DEBUG: TelemetryManager.connect: Waiting for heartbeat...")
-            heartbeat = self.master.wait_heartbeat(timeout=10) # Default MAVUtil timeout is 5s, can be increased
+            heartbeat = self.master.wait_heartbeat(timeout=5) # Default MAVUtil timeout is 5s, can be increased
             
             if heartbeat:
                 print(f"DEBUG: TelemetryManager.connect: Heartbeat received: {heartbeat}")

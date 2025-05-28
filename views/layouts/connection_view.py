@@ -33,7 +33,7 @@ class ConnectionView(BaseView):
         
         # Baud rate selection (for serial connections) - make it compact
         self.baud_combo = QComboBox()
-        for baud in ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]:
+        for baud in ["57600", "115200"]:
             self.baud_combo.addItem(baud)
         self.baud_combo.setCurrentText("115200")
         self.baud_combo.setFixedWidth(80)  # Set fixed width
