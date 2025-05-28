@@ -183,7 +183,7 @@ The architecture is verified working, but needs testing with live MAVLink source
 
 ### Live Connection Testing (CURRENT FOCUS)
 1. **SITL Testing**: Use ArduPilot SITL for consistent test environment
-2. **UDP Testing**: Test with MAVLink stream at localhost:14550
+2. **UDP Testing**: Test with MAVLink stream at 0.0.0.0:14550
 3. **UI Verification**: Confirm UI updates with live telemetry data
 
 ### Performance Verification

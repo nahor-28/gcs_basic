@@ -121,7 +121,7 @@ python main.py
 
 ### Testing Connection
 - **ArduPilot SITL**: Use Software In The Loop for testing
-- **UDP Simulator**: Connect to localhost:14550 for MAVProxy
+- **UDP Simulator**: Connect to 0.0.0.0:14550 for MAVLink data
 - **Hardware**: Connect directly to autopilot via serial/radio
 
 ## Development Status & Next Steps

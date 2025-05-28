@@ -121,7 +121,7 @@ Test the complete signal flow with live MAVLink data to verify telemetry updates
 #### Specific Actions
 1. **Set up MAVLink Source**
    - Install ArduPilot SITL OR use MAVProxy
-   - Configure to output to localhost:14550
+   - Configure to output to 0.0.0.0:14550
    - Verify MAVLink stream is available
 
 2. **Test Live Signal Flow**

@@ -11,7 +11,7 @@ class ConnectionModel(BaseModel):
             signal_manager: The application's signal manager for communication
         """
         super().__init__(signal_manager)
-        self.connection_string = "udp:localhost:14550"
+        self.connection_string = "udp:0.0.0.0:14550"
         self.baud_rate = 115200
         self.connection_status = "DISCONNECTED"
         self.status_message = "Not connected"

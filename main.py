@@ -27,7 +27,7 @@ class MVCApplication(QMainWindow):
         self.signal_manager = SignalManager()
         
         self.telemetry_manager = TelemetryManager(
-            initial_conn_string='udp:localhost:14550',
+            initial_conn_string='udp:0.0.0.0:14550',
             initial_baud=115200,
             signal_manager=self.signal_manager
         )

@@ -65,7 +65,7 @@ class SignalFlowTestWindow(QWidget):
         layout.addWidget(self.connection_status)
         
         # Connect/Disconnect buttons
-        self.connect_btn = QPushButton("Connect to localhost:14550")
+        self.connect_btn = QPushButton("Connect to 0.0.0.0:14550")
         self.connect_btn.clicked.connect(self.connect_to_vehicle)
         layout.addWidget(self.connect_btn)
         
@@ -155,7 +155,7 @@ class SignalFlowTestWindow(QWidget):
     def connect_to_vehicle(self):
         """Connect to vehicle using signal system"""
         self.log_message("User clicked Connect - emitting connection_request signal")
-        self.signal_manager.connection_request.emit('udp:localhost:14550', 115200)
+        self.signal_manager.connection_request.emit('udp:0.0.0.0:14550', 115200)
         
     def disconnect_from_vehicle(self):
         """Disconnect from vehicle using signal system"""
@@ -173,13 +173,13 @@ def main():
     print("=== GCS Signal Flow Test ===")
     print("This test will:")
     print("1. Set up the complete MVC signal flow")
-    print("2. Attempt to connect to localhost:14550 (SITL/MAVProxy)")
+    print("2. Attempt to connect to 0.0.0.0:14550 (SITL/MAVProxy)")
     print("3. Display detailed logging of signal flow")
     print("4. Show telemetry updates in the UI")
     print("")
     print("To test with ArduPilot SITL:")
-    print("  1. Run: sim_vehicle.py -v ArduCopter --out=udp:localhost:14550")
-    print("  2. Or run MAVProxy and forward to localhost:14550")
+    print("  1. Run: sim_vehicle.py -v ArduCopter --out=udp:0.0.0.0:14550")
+    print("  2. Or run MAVProxy and forward to 0.0.0.0:14550")
     print("")
     print("Expected signal flow:")
     print("  TelemetryManager -> VehicleController -> VehicleModel -> TelemetryView")
