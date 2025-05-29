@@ -411,4 +411,31 @@ With the signal flow now fully verified, these features are ready for confident 
 
 ---
 
+## [Latest Changes] - 2025-05-29
+
+### ✅ Added - Interactive Map with Real-time Vehicle Tracking
+- **Complete Interactive Map**: Replaced placeholder with full Folium-based mapping
+- **Hybrid Update System**: Real-time coordinates with smart visual updates every 5 seconds
+- **Vehicle Tracking**: Red aircraft marker showing current GPS position
+- **Flight Path Visualization**: Blue polyline displaying movement history (last 50 points)
+- **Enhanced Status Display**: Live GPS coordinates with flight path statistics
+- **Performance Optimized**: Minimized map flashing while maintaining responsiveness
+- **Professional UI**: Styled status display with enhanced visual feedback
+
+### 🔧 Technical Implementation
+- **Technology Stack**: Folium + QWebEngineView integration
+- **Update Strategy**: Immediate first GPS fix, then 5-second intervals
+- **Performance**: Reduced visual updates by 80% while keeping coordinate feedback real-time
+- **Architecture**: Maintains existing MVC pattern and signal flow
+
+### 📍 Map Features
+- OpenStreetMap integration with interactive zoom/pan
+- Real-time vehicle position marker with aircraft icon
+- GPS accuracy circle (15-meter radius)
+- Flight path trail showing vehicle movement
+- Coordinate display with 6-decimal precision
+- Auto-centering on first GPS fix
+
+---
+
 *This changelog is maintained to track the evolution from a basic telemetry viewer to a professional Ground Control Station platform. See individual helper documents for specific development guidance.* 
