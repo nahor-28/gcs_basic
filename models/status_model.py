@@ -1,8 +1,12 @@
 from models.base_model import BaseModel
 from datetime import datetime
+import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 class StatusModel(BaseModel):
-    """Model for application status messages."""
+    """Model for handling status messages."""
     
     def __init__(self, signal_manager=None):
         """
@@ -13,54 +17,55 @@ class StatusModel(BaseModel):
         """
         super().__init__(signal_manager)
         self.messages = []
-        self.max_messages = 100  # Limit number of status messages
+        self.max_messages = 100  # Max messages to store
+        logger.info("StatusModel initialized")
         self.connect_signals()
         
     def connect_signals(self):
-        """Connect signal handlers."""
+        """Connect to relevant signals."""
         if self.signal_manager:
-            # Listen for status messages - use lambda to pass from_signal=True
-            # This prevents infinite recursion
-            self.signal_manager.status_text_received.connect(
-                lambda text, severity: self.add_message(text, severity, from_signal=True)
-            )
+            # logger.debug("StatusModel: Connecting to status_text_received signal")
+            self.signal_manager.status_text_received.connect(self._handle_raw_status_text)
+        else:
+            logger.error("StatusModel: No signal_manager available")
     
-    def add_message(self, text, severity=0, from_signal=False):
-        """
-        Add a new status message.
-        
-        Args:
-            text: Message text
-            severity: Message severity (0=info, 1=warning, 2=error)
-            from_signal: Flag to prevent recursive signal emission
-        """
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        
-        # Add new message at the beginning
-        self.messages.insert(0, {
-            "timestamp": timestamp,
+    def _handle_raw_status_text(self, text: str, severity: int):
+        """Handles a raw status text received from TelemetryManager (e.g., STATUSTEXT)."""
+        # logger.debug(f"StatusModel: Received raw status text: '{text}', severity: {severity}")
+        self.add_message(text, severity, source="MAVLink")
+    
+    def add_message(self, text: str, severity: int, timestamp: float = None, source: str = "Application"):
+        """Add a new status message."""
+        if timestamp is None:
+            timestamp = time.time()
+            
+        # logger.debug(f"StatusModel: Adding message - Text: '{text}', Severity: {severity}, Source: {source}")
+
+        message_data = {
             "text": text,
-            "severity": severity
-        })
+            "severity": severity,
+            "timestamp": timestamp,
+            "time_str": datetime.fromtimestamp(timestamp).strftime('%H:%M:%S'),
+            "source": source
+        }
         
-        # Trim if exceeding max messages
+        self.messages.append(message_data)
         if len(self.messages) > self.max_messages:
-            self.messages = self.messages[:self.max_messages]
-        
-        # Notify views, but only if this method wasn't called from the signal
-        # to prevent infinite recursion
-        if self.signal_manager and not from_signal:
-            # Send the most recent message
-            self.signal_manager.status_text_received.emit(text, severity)
+            self.messages.pop(0) # Remove the oldest message
+            
+        # Emit a signal with the new message data
+        if self.signal_manager:
+            # logger.debug(f"StatusModel: Emitting status_model_new_message with data: {message_data}")
+            self.signal_manager.status_model_new_message.emit(message_data)
     
-    def get_data(self):
-        """
-        Get all status messages.
-        
-        Returns:
-            list: List of status messages
-        """
+    def get_messages(self):
+        """Get all current status messages."""
+        # logger.debug(f"StatusModel: get_messages called, returning {len(self.messages)} messages")
         return self.messages
+
+    def get_data(self):
+        """Get all current status messages (compatible with BaseController)."""
+        return self.get_messages()
         
     def get_latest_message(self):
         """

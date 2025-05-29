@@ -43,14 +43,14 @@ class VehicleController(BaseController):
             raw_data: Dictionary with raw telemetry data (e.g., from MAVLink)
                       This data often includes a 'type' field indicating the message type.
         """
-        logger.debug(f"VehicleController: Received raw telemetry data: {raw_data}")
+        # logger.debug(f"VehicleController: Received raw telemetry data: {raw_data}")
         
         if not self.model or not isinstance(raw_data, dict):
             logger.warning(f"VehicleController: Invalid model ({self.model}) or data type ({type(raw_data)})")
             return
 
         msg_type = raw_data.get('type')
-        logger.debug(f"VehicleController: Processing message type: {msg_type}")
+        # logger.debug(f"VehicleController: Processing message type: {msg_type}")
 
         # Example parsing logic based on assumed MAVLink-like message types
         # This will need to be adapted to the actual structure of raw_data
@@ -63,9 +63,9 @@ class VehicleController(BaseController):
             # Filter out None values before updating
             attitude_data = {k: v for k, v in attitude_data.items() if v is not None}
             if attitude_data:
-                logger.debug(f"VehicleController: Updating attitude with data: {attitude_data}")
+                # logger.debug(f"VehicleController: Updating attitude with data: {attitude_data}")
                 self.model.update_attitude(attitude_data)
-                logger.debug("VehicleController: Called model.update_attitude()")
+                # logger.debug("VehicleController: Called model.update_attitude()")
             else:
                 logger.warning("VehicleController: ATTITUDE message had no valid data")
         
@@ -78,9 +78,9 @@ class VehicleController(BaseController):
             }
             position_data = {k: v for k, v in position_data.items() if v is not None}
             if position_data:
-                logger.debug(f"VehicleController: Updating position with data: {position_data}")
+                # logger.debug(f"VehicleController: Updating position with data: {position_data}")
                 self.model.update_position(position_data)
-                logger.debug("VehicleController: Called model.update_position()")
+                # logger.debug("VehicleController: Called model.update_position()")
             else:
                 logger.warning("VehicleController: GLOBAL_POSITION_INT message had no valid data")
 
@@ -97,9 +97,9 @@ class VehicleController(BaseController):
             else:
                 gps_data.pop('heading', None)
             if gps_data:
-                logger.debug(f"VehicleController: Updating GPS info with data: {gps_data}")
+                # logger.debug(f"VehicleController: Updating GPS info with data: {gps_data}")
                 self.model.update_gps_info(gps_data)
-                logger.debug("VehicleController: Called model.update_gps_info()")
+                # logger.debug("VehicleController: Called model.update_gps_info()")
             else:
                 logger.warning("VehicleController: GPS_RAW_INT message had no valid data")
 
@@ -111,9 +111,9 @@ class VehicleController(BaseController):
             }
             status_update = {k: v for k, v in status_update.items() if v is not None}
             if status_update:
-                logger.debug(f"VehicleController: Updating system status with data: {status_update}")
+                # logger.debug(f"VehicleController: Updating system status with data: {status_update}")
                 self.model.update_system_status(status_update) # Assuming battery is part of general system status
-                logger.debug("VehicleController: Called model.update_system_status()")
+                # logger.debug("VehicleController: Called model.update_system_status()")
             else:
                 logger.warning("VehicleController: SYS_STATUS message had no valid data")
 
@@ -129,30 +129,33 @@ class VehicleController(BaseController):
             if raw_data.get('heading') is not None: attitude_heading_update['heading'] = raw_data['heading']
 
             if position_speed_update: # Could also be self.model.update_speed_info(data)
-                logger.debug(f"VehicleController: Updating position with speed data: {position_speed_update}")
+                # logger.debug(f"VehicleController: Updating position with speed data: {position_speed_update}")
                 self.model.update_position(position_speed_update) # Augment position data with speeds
-                logger.debug("VehicleController: Called model.update_position() for VFR_HUD speeds")
+                # logger.debug("VehicleController: Called model.update_position() for VFR_HUD speeds")
             if attitude_heading_update:
-                logger.debug(f"VehicleController: Updating attitude with heading data: {attitude_heading_update}")
+                # logger.debug(f"VehicleController: Updating attitude with heading data: {attitude_heading_update}")
                 self.model.update_attitude(attitude_heading_update) # Augment attitude with heading
-                logger.debug("VehicleController: Called model.update_attitude() for VFR_HUD heading")
+                # logger.debug("VehicleController: Called model.update_attitude() for VFR_HUD heading")
         
         elif msg_type == 'HEARTBEAT':
             heartbeat_data = {
                 'armed': raw_data.get('armed'),
                 'mode': raw_data.get('mode'),
+                'flight_mode': raw_data.get('mode'),  # Add flight_mode key for telemetry view
+                'arming_status': 'ARMED' if raw_data.get('armed') else 'DISARMED',  # Add arming_status for telemetry view
                 'system_status': raw_data.get('system_status')
             }
             heartbeat_data = {k: v for k, v in heartbeat_data.items() if v is not None}
             if heartbeat_data:
-                logger.debug(f"VehicleController: Updating system status with heartbeat data: {heartbeat_data}")
+                # logger.debug(f"VehicleController: Updating system status with heartbeat data: {heartbeat_data}")
                 self.model.update_system_status(heartbeat_data)
-                logger.debug("VehicleController: Called model.update_system_status() for HEARTBEAT")
+                # logger.debug("VehicleController: Called model.update_system_status() for HEARTBEAT")
             else:
                 logger.warning("VehicleController: HEARTBEAT message had no valid data")
         
         else:
-            logger.debug(f"VehicleController: Ignoring message type: {msg_type}")
+            # logger.debug(f"VehicleController: Ignoring message type: {msg_type}")
+            pass
 
     def set_mode(self, mode):
         """
@@ -168,6 +171,69 @@ class VehicleController(BaseController):
             pass
         # Update model if mode change is confirmed by vehicle
         # self.model.update_system_status({'mode': new_mode})
+    
+    def is_safe_to_arm_takeoff(self):
+        """
+        Check if vehicle is in a safe mode for arm & takeoff.
+        
+        Returns:
+            tuple: (is_safe, error_message)
+        """
+        # Get current vehicle status
+        status_data = self.model.get_system_status_data()
+        current_mode = status_data.get('mode', '').upper()
+        armed = status_data.get('armed', False)
+        
+        # Define modes that allow arming (include both naming conventions)
+        # Note: GUIDED is also safe since we automatically switch to it for takeoff
+        safe_modes = ['STABILIZE', 'ACRO', 'ALTHOLD', 'ALT_HOLD', 'LOITER', 'POSHOLD', 'GUIDED']
+        
+        # Define modes that do not allow arming
+        unsafe_modes = ['AUTO', 'AUTOTUNE', 'BRAKE', 'CIRCLE', 'FLIP', 
+                       'LAND', 'RTL', 'SMARTRTL', 'SYSID', 'AVOIDADSB', 'FOLLOW']
+        
+        logger.debug(f"VehicleController: Safety check - current_mode: {current_mode}, armed: {armed}")
+        
+        # Check if already armed
+        if armed:
+            return False, "Vehicle is already armed"
+            
+        # Check if in safe mode
+        if current_mode in unsafe_modes:
+            return False, f"Cannot arm in {current_mode} mode. Switch to STABILIZE, ACRO, ALTHOLD, LOITER, POSHOLD, or GUIDED first."
+            
+        if current_mode not in safe_modes and current_mode != '':
+            # If mode is not empty but also not in our known safe list, warn but allow
+            logger.warning(f"VehicleController: Unknown mode '{current_mode}' for safety check")
+            
+        return True, "Vehicle appears ready for arm & takeoff"
+    
+    def request_arm_takeoff(self, target_altitude=10.0):
+        """
+        Request arm and takeoff to specified altitude.
+        
+        Args:
+            target_altitude: Target altitude in meters (default 10m)
+        """
+        logger.info(f"VehicleController: request_arm_takeoff called with altitude {target_altitude}m")
+        
+        # Perform safety checks
+        is_safe, error_message = self.is_safe_to_arm_takeoff()
+        
+        if not is_safe:
+            logger.warning(f"VehicleController: Safety check failed: {error_message}")
+            if self.signal_manager:
+                self.signal_manager.command_response.emit("arm_takeoff", False, error_message)
+            return False
+            
+        # Send the command through signal manager
+        if self.signal_manager:
+            logger.info(f"VehicleController: Emitting arm_takeoff_request for {target_altitude}m")
+            self.signal_manager.arm_takeoff_request.emit(target_altitude)
+            return True
+        else:
+            logger.error("VehicleController: No signal_manager available for arm_takeoff_request")
+            return False
     
     def arm_vehicle(self):
         """Arm the vehicle."""

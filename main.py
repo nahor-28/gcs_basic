@@ -32,7 +32,7 @@ class MVCApplication(QMainWindow):
         self.setWindowTitle("GCS - Observer MVC Architecture")
         self.resize(1200, 800)
         
-        logger.debug("Initializing MVCApplication components")
+        # logger.debug("Initializing MVCApplication components")
         
         self.signal_manager = SignalManager()
         
@@ -65,16 +65,21 @@ class MVCApplication(QMainWindow):
             self.signal_manager
         )
         
-        logger.debug("All MVCApplication components initialized")
+        # logger.debug("All MVCApplication components initialized")
         self._initialize_ui()
+        
+        # Wire up HeaderView with VehicleController after everything is initialized
+        if hasattr(self.main_view, 'header_view'):
+            self.main_view.header_view.set_vehicle_controller(self.vehicle_controller)
+            # logger.debug("HeaderView wired to VehicleController")
         
     def _initialize_ui(self):
         self.show()
         self.status_model.add_message("Application initialized (Event-Driven)", 0)
-        logger.debug("MVCApplication UI initialized")
+        # logger.debug("MVCApplication UI initialized")
         
     def closeEvent(self, event):
-        logger.debug("MVCApplication closing")
+        # logger.debug("MVCApplication closing")
         if self.telemetry_manager:
             self.telemetry_manager.stop()
         self.status_model.add_message("Application closing", 0)

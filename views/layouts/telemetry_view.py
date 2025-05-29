@@ -19,24 +19,21 @@ class TelemetryView(BaseView):
     def setup_ui(self):
         """Setup the telemetry UI components."""
         logger.debug("TelemetryView: Setting up UI components")
-        # Main layout
-        main_layout = QVBoxLayout()
+        # Create layout
+        layout = QVBoxLayout()
         
-        # Create group boxes for different telemetry categories
-        attitude_group = self._create_attitude_group()
-        position_group = self._create_position_group()
-        battery_group = self._create_battery_group()
-        speed_group = self._create_speed_group()
+        # Create telemetry groups
+        layout.addWidget(self._create_attitude_group())
+        layout.addWidget(self._create_position_group())
+        layout.addWidget(self._create_speed_group())
+        layout.addWidget(self._create_battery_group())
+        layout.addWidget(self._create_status_group())
         
-        # Add groups to layout
-        main_layout.addWidget(attitude_group)
-        main_layout.addWidget(position_group)
-        main_layout.addWidget(speed_group)
-        main_layout.addWidget(battery_group)
+        # Add stretch to fill remaining space
+        layout.addStretch()
         
-        # Set main layout
-        self.setLayout(main_layout)
-        logger.debug("TelemetryView: UI setup completed")
+        self.setLayout(layout)
+        # logger.debug("TelemetryView UI setup complete")
     
     def _create_attitude_group(self):
         """Create the attitude telemetry group."""
@@ -60,7 +57,7 @@ class TelemetryView(BaseView):
         layout.addWidget(self.heading_label, 3, 1)
         
         group.setLayout(layout)
-        logger.debug("TelemetryView: Created attitude group")
+        # logger.debug("TelemetryView: Created attitude group")
         return group
     
     def _create_position_group(self):
@@ -92,7 +89,7 @@ class TelemetryView(BaseView):
         layout.addWidget(self.gps_sats_label, 5, 1)
         
         group.setLayout(layout)
-        logger.debug("TelemetryView: Created position group with GPS labels")
+        # logger.debug("TelemetryView: Created position group with GPS labels")
         return group
     
     def _create_battery_group(self):
@@ -114,7 +111,7 @@ class TelemetryView(BaseView):
         layout.addWidget(self.level_label, 2, 1)
         
         group.setLayout(layout)
-        logger.debug("TelemetryView: Created battery group")
+        # logger.debug("TelemetryView: Created battery group")
         return group
     
     def _create_speed_group(self):
@@ -136,12 +133,31 @@ class TelemetryView(BaseView):
         layout.addWidget(self.climb_label, 2, 1)
         
         group.setLayout(layout)
-        logger.debug("TelemetryView: Created speed group")
+        # logger.debug("TelemetryView: Created speed group")
+        return group
+    
+    def _create_status_group(self):
+        """Create the status telemetry group."""
+        group = QGroupBox("Status")
+        layout = QGridLayout()
+        
+        # Create labels
+        self.flight_mode_label = QLabel("Flight Mode: --")
+        self.arming_status_label = QLabel("Arming Status: --")
+        
+        # Add labels to layout
+        layout.addWidget(QLabel("Flight Mode:"), 0, 0)
+        layout.addWidget(self.flight_mode_label, 0, 1)
+        layout.addWidget(QLabel("Arming Status:"), 1, 0)
+        layout.addWidget(self.arming_status_label, 1, 1)
+        
+        group.setLayout(layout)
+        # logger.debug("TelemetryView: Created status group")
         return group
     
     def connect_signals(self):
         """Connect signals to slots."""
-        logger.debug("TelemetryView: Connecting signals")
+        # logger.debug("TelemetryView: Connecting signals")
         if self.signal_manager:
             self.signal_manager.vehicle_attitude_updated.connect(self.update_attitude_display)
             self.signal_manager.vehicle_position_updated.connect(self.update_position_display)
@@ -153,86 +169,92 @@ class TelemetryView(BaseView):
     
     def update_attitude_display(self, attitude_data):
         """Update attitude related labels."""
-        logger.debug(f"TelemetryView: update_attitude_display called with data: {attitude_data}")
+        # logger.debug(f"TelemetryView: update_attitude_display called with data: {attitude_data}")
         try:
             if 'roll' in attitude_data:
                 self.roll_label.setText(f"{attitude_data['roll']:.1f} deg")
-                logger.debug(f"TelemetryView: Updated roll label to: {attitude_data['roll']:.1f} deg")
+                # logger.debug(f"TelemetryView: Updated roll label to: {attitude_data['roll']:.1f} deg")
             if 'pitch' in attitude_data:
                 self.pitch_label.setText(f"{attitude_data['pitch']:.1f} deg")
-                logger.debug(f"TelemetryView: Updated pitch label to: {attitude_data['pitch']:.1f} deg")
+                # logger.debug(f"TelemetryView: Updated pitch label to: {attitude_data['pitch']:.1f} deg")
             if 'yaw' in attitude_data:
                 self.yaw_label.setText(f"{attitude_data['yaw']:.1f} deg")
-                logger.debug(f"TelemetryView: Updated yaw label to: {attitude_data['yaw']:.1f} deg")
+                # logger.debug(f"TelemetryView: Updated yaw label to: {attitude_data['yaw']:.1f} deg")
             if 'heading' in attitude_data:
                 self.heading_label.setText(f"{attitude_data['heading']:.1f} deg")
-                logger.debug(f"TelemetryView: Updated heading label to: {attitude_data['heading']:.1f} deg")
-            logger.debug("TelemetryView: Attitude display update completed")
+                # logger.debug(f"TelemetryView: Updated heading label to: {attitude_data['heading']:.1f} deg")
+            # logger.debug("TelemetryView: Attitude display update completed")
         except Exception as e:
             logger.error(f"TelemetryView: Error updating attitude display: {e}")
 
     def update_position_display(self, position_data):
         """Update position related labels and speed if it's included."""
-        logger.debug(f"TelemetryView: update_position_display called with data: {position_data}")
+        # logger.debug(f"TelemetryView: update_position_display called with data: {position_data}")
         try:
             if 'lat' in position_data:
                 self.lat_label.setText(f"{position_data['lat']:.7f}")
-                logger.debug(f"TelemetryView: Updated latitude label to: {position_data['lat']:.7f}")
+                # logger.debug(f"TelemetryView: Updated latitude label to: {position_data['lat']:.7f}")
             if 'lon' in position_data:
                 self.lon_label.setText(f"{position_data['lon']:.7f}")
-                logger.debug(f"TelemetryView: Updated longitude label to: {position_data['lon']:.7f}")
+                # logger.debug(f"TelemetryView: Updated longitude label to: {position_data['lon']:.7f}")
             if 'alt_msl' in position_data:
                 self.alt_label.setText(f"{position_data['alt_msl']:.1f} m")
-                logger.debug(f"TelemetryView: Updated altitude label to: {position_data['alt_msl']:.1f} m")
+                # logger.debug(f"TelemetryView: Updated altitude label to: {position_data['alt_msl']:.1f} m")
             if 'alt_agl' in position_data:
                 self.rel_alt_label.setText(f"{position_data['alt_agl']:.1f} m")
-                logger.debug(f"TelemetryView: Updated relative altitude label to: {position_data['alt_agl']:.1f} m")
+                # logger.debug(f"TelemetryView: Updated relative altitude label to: {position_data['alt_agl']:.1f} m")
             
             if 'groundspeed' in position_data:
                 self.groundspeed_label.setText(f"{position_data['groundspeed']:.1f} m/s")
-                logger.debug(f"TelemetryView: Updated groundspeed label to: {position_data['groundspeed']:.1f} m/s")
+                # logger.debug(f"TelemetryView: Updated groundspeed label to: {position_data['groundspeed']:.1f} m/s")
             if 'airspeed' in position_data:
                 self.airspeed_label.setText(f"{position_data['airspeed']:.1f} m/s")
-                logger.debug(f"TelemetryView: Updated airspeed label to: {position_data['airspeed']:.1f} m/s")
+                # logger.debug(f"TelemetryView: Updated airspeed label to: {position_data['airspeed']:.1f} m/s")
             if 'climb_rate' in position_data:
                 self.climb_label.setText(f"{position_data['climb_rate']:.1f} m/s")
-                logger.debug(f"TelemetryView: Updated climb rate label to: {position_data['climb_rate']:.1f} m/s")
-            logger.debug("TelemetryView: Position display update completed")
+                # logger.debug(f"TelemetryView: Updated climb rate label to: {position_data['climb_rate']:.1f} m/s")
+            # logger.debug("TelemetryView: Position display update completed")
         except Exception as e:
             logger.error(f"TelemetryView: Error updating position display: {e}")
 
     def update_gps_display(self, gps_data):
         """Update GPS specific labels."""
-        logger.debug(f"TelemetryView: update_gps_display called with data: {gps_data}")
+        # logger.debug(f"TelemetryView: update_gps_display called with data: {gps_data}")
         try:
             if 'fix_type' in gps_data:
                 self.gps_fix_label.setText(f"{gps_data['fix_type']}")
-                logger.debug(f"TelemetryView: Updated GPS fix label to: {gps_data['fix_type']}")
+                # logger.debug(f"TelemetryView: Updated GPS fix label to: {gps_data['fix_type']}")
             if 'satellites_visible' in gps_data:
                 self.gps_sats_label.setText(f"{gps_data['satellites_visible']}")
-                logger.debug(f"TelemetryView: Updated GPS satellites label to: {gps_data['satellites_visible']}")
+                # logger.debug(f"TelemetryView: Updated GPS satellites label to: {gps_data['satellites_visible']}")
             if 'heading' in gps_data and not hasattr(self, 'heading_from_attitude'):
                  self.heading_label.setText(f"{gps_data['heading']:.1f} deg")
-                 logger.debug(f"TelemetryView: Updated heading from GPS to: {gps_data['heading']:.1f} deg")
-            logger.debug("TelemetryView: GPS display update completed")
+                 # logger.debug(f"TelemetryView: Updated heading from GPS to: {gps_data['heading']:.1f} deg")
+            # logger.debug("TelemetryView: GPS display update completed")
         except Exception as e:
             logger.error(f"TelemetryView: Error updating GPS display: {e}")
 
     def update_status_display(self, status_data):
         """Update status related labels (e.g., battery)."""
-        logger.debug(f"TelemetryView: update_status_display called with data: {status_data}")
+        # logger.debug(f"TelemetryView: update_status_display called with data: {status_data}")
         try:
             if 'battery_voltage' in status_data:
                 self.voltage_label.setText(f"{status_data['battery_voltage']:.2f} V")
-                logger.debug(f"TelemetryView: Updated voltage label to: {status_data['battery_voltage']:.2f} V")
+                # logger.debug(f"TelemetryView: Updated voltage label to: {status_data['battery_voltage']:.2f} V")
             if 'battery_current' in status_data:
                 current = status_data['battery_current']
                 self.current_label.setText(f"{current:.2f} A" if current is not None else "-- A")
-                logger.debug(f"TelemetryView: Updated current label to: {current:.2f} A" if current is not None else "-- A")
+                # logger.debug(f"TelemetryView: Updated current label to: {current:.2f} A" if current is not None else "-- A")
             if 'battery_remaining' in status_data:
                 level = status_data['battery_remaining']
                 self.level_label.setText(f"{level}%" if level is not None else "-- %")
-                logger.debug(f"TelemetryView: Updated battery level to: {level}%" if level is not None else "-- %")
-            logger.debug("TelemetryView: Status display update completed")
+                # logger.debug(f"TelemetryView: Updated battery level to: {level}%" if level is not None else "-- %")
+            if 'flight_mode' in status_data:
+                self.flight_mode_label.setText(f"{status_data['flight_mode']}")
+                # logger.debug(f"TelemetryView: Updated flight mode label to: {status_data['flight_mode']}")
+            if 'arming_status' in status_data:
+                self.arming_status_label.setText(f"{status_data['arming_status']}")
+                # logger.debug(f"TelemetryView: Updated arming status label to: {status_data['arming_status']}")
+            # logger.debug("TelemetryView: Status display update completed")
         except Exception as e:
             logger.error(f"TelemetryView: Error updating status display: {e}")

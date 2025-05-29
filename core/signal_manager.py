@@ -24,7 +24,9 @@ class SignalManager(QObject):
     connection_model_changed = Signal(dict)
     status_model_new_message = Signal(dict)
 
-    # Command signals (for future use)
+    # Vehicle command signals
+    arm_takeoff_request = Signal(float)  # Data: target_altitude
+    command_response = Signal(str, bool, str)  # Data: command_type, success, message
     
     def __init__(self):
         super().__init__()

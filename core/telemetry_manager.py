@@ -137,13 +137,14 @@ class TelemetryThread(QThread):
                 # --- Publish TELEMETRY_UPDATE event ---
                 # Check len > 2 ensures type and timestamp are present plus actual data
                 if publish_event and len(data) > 2:
-                    logging.debug(f"TelemetryManager: Emitting telemetry_update signal with data: {data}")
+                    # logging.debug(f"TelemetryManager: Emitting telemetry_update signal with data: {data}")
                     self.signal_manager.telemetry_update.emit(data)
-                    logging.debug(f"TelemetryManager: telemetry_update signal emitted for message type: {msg_type}")
+                    # logging.debug(f"TelemetryManager: telemetry_update signal emitted for message type: {msg_type}")
                 elif publish_event:
                     logging.warning(f"TelemetryManager: Skipping telemetry_update emission - insufficient data: {data}")
                 else:
-                    logging.debug(f"TelemetryManager: Skipping telemetry_update emission - publish_event=False for message type: {msg_type}")
+                    # logging.debug(f"TelemetryManager: Skipping telemetry_update emission - publish_event=False for message type: {msg_type}")
+                    pass
                     
             except (ConnectionResetError, BrokenPipeError) as conn_e:
                 errmsg = f"{type(conn_e).__name__} in receive loop."
@@ -207,25 +208,27 @@ class TelemetryManager(QObject):
         if signal_manager:
             signal_manager.connection_request.connect(self.handle_connect_request)
             signal_manager.disconnect_request.connect(self.handle_disconnect_request)
+            signal_manager.arm_takeoff_request.connect(self.handle_arm_takeoff_request)
             logging.info("TelemetryManager connected to signal manager.")
             
     def _update_status(self, new_status: str, message: str = ""):
         """Updates internal status and emits a status change signal."""
-        print(f"DEBUG: TelemetryManager._update_status: Attempting to set status to '{new_status}' with message '{message}'") 
+        # print(f"DEBUG: TelemetryManager._update_status: Attempting to set status to '{new_status}' with message '{message}'") 
         # Ensure change if message is different OR status is different
         if new_status != self.current_status or (message and message != getattr(self, 'status_message', '')):
             self.current_status = new_status
             self.status_message = message # Store the message with the status
             logging.info(f"Connection Status: {new_status} - {message}")
-            print(f"DEBUG: TelemetryManager._update_status: Emitting connection_status_changed: '{new_status}', '{message}', conn_str: '{self._connection_string}'")
+            # print(f"DEBUG: TelemetryManager._update_status: Emitting connection_status_changed: '{new_status}', '{message}', conn_str: '{self._connection_string}'")
             if self.signal_manager:
                 self.signal_manager.connection_status_changed.emit(new_status, message, self._connection_string)
         else:
-            print(f"DEBUG: TelemetryManager._update_status: Status '{new_status}' and message '{message}' did not change internal state. Current status: '{self.current_status}', current message: '{getattr(self, 'status_message', '')}'")
+            # print(f"DEBUG: TelemetryManager._update_status: Status '{new_status}' and message '{message}' did not change internal state. Current status: '{self.current_status}', current message: '{getattr(self, 'status_message', '')}'")
+            pass
                 
     def connect(self):
         """Establishes the MAVLink connection using internal connection string/_baud."""
-        print(f"DEBUG: TelemetryManager.connect called. self._is_connecting={self._is_connecting}, self.master is None: {self.master is None}")
+        # print(f"DEBUG: TelemetryManager.connect called. self._is_connecting={self._is_connecting}, self.master is None: {self.master is None}")
         if self._is_connecting:
             logging.info("Connection attempt already in progress.")
             return False
@@ -254,20 +257,20 @@ class TelemetryManager(QObject):
             if not self.master:
                 self._update_status("ERROR", "mavutil.mavlink_connection failed")
                 self._is_connecting = False
-                print("DEBUG: TelemetryManager.connect: mavutil.mavlink_connection failed.")
+                # print("DEBUG: TelemetryManager.connect: mavutil.mavlink_connection failed.")
                 return False
                 
             self._update_status("CONNECTING", "Waiting for heartbeat...")
-            print("DEBUG: TelemetryManager.connect: Waiting for heartbeat...")
+            # print("DEBUG: TelemetryManager.connect: Waiting for heartbeat...")
             heartbeat = self.master.wait_heartbeat(timeout=5) # Default MAVUtil timeout is 5s, can be increased
             
             if heartbeat:
-                print(f"DEBUG: TelemetryManager.connect: Heartbeat received: {heartbeat}")
+                # print(f"DEBUG: TelemetryManager.connect: Heartbeat received: {heartbeat}")
                 self._update_status("CONNECTED", f"Connected to target {self.master.target_system}/{self.master.target_component}")
                 self._is_connecting = False
                 return True
             else:
-                print("DEBUG: TelemetryManager.connect: No heartbeat received within timeout.")
+                # print("DEBUG: TelemetryManager.connect: No heartbeat received within timeout.")
                 self._update_status("ERROR", "No heartbeat received within timeout.")
                 if self.master: self.master.close()
                 self.master = None
@@ -275,7 +278,7 @@ class TelemetryManager(QObject):
                 return False
                 
         except Exception as e:
-            print(f"DEBUG: TelemetryManager.connect: Exception occurred: {e}")
+            # print(f"DEBUG: TelemetryManager.connect: Exception occurred: {e}")
             self._update_status("ERROR", f"Connection failed: {e}")
             if self.master: self.master.close()
             self.master = None
@@ -302,7 +305,7 @@ class TelemetryManager(QObject):
                         mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
                         0, msg_id, frequency, 0, 0, 0, 0, 0
                     )
-                    logging.debug(f"Requested ID {msg_id} at interval {frequency} us")
+                    # logger.debug(f"Requested ID {msg_id} at interval {frequency} us")
                     time.sleep(0.05)
                     
                 except AttributeError as ae:
@@ -407,3 +410,106 @@ class TelemetryManager(QObject):
                 self.thread.reset_heartbeat()
         else:
             self.attempt_reconnect()  # Try again if connection failed
+
+    def send_command_long(self, command, param1=0, param2=0, param3=0, param4=0, param5=0, param6=0, param7=0):
+        """
+        Send a MAVLink command_long message.
+        
+        Args:
+            command: MAV_CMD command ID
+            param1-param7: Command parameters
+            
+        Returns:
+            bool: True if command was sent successfully
+        """
+        if not self.master:
+            logging.error("TelemetryManager: Cannot send command - not connected")
+            return False
+            
+        try:
+            self.master.mav.command_long_send(
+                self.master.target_system,
+                self.master.target_component,
+                command,
+                0,  # confirmation
+                param1, param2, param3, param4, param5, param6, param7
+            )
+            logging.info(f"TelemetryManager: Sent command {command} with params [{param1}, {param2}, {param3}, {param4}, {param5}, {param6}, {param7}]")
+            return True
+        except Exception as e:
+            logging.error(f"TelemetryManager: Error sending command {command}: {e}")
+            return False
+            
+    def handle_arm_takeoff_request(self, target_altitude):
+        """
+        Handle arm and takeoff request.
+        
+        Args:
+            target_altitude: Target altitude in meters
+        """
+        logging.info(f"TelemetryManager: Received arm & takeoff request for altitude {target_altitude}m")
+        
+        if not self.master:
+            if self.signal_manager:
+                self.signal_manager.command_response.emit("arm_takeoff", False, "Not connected to vehicle")
+            return
+            
+        try:
+            # Step 1: Switch to GUIDED mode (required for takeoff in ArduCopter)
+            logging.info("TelemetryManager: Switching to GUIDED mode...")
+            guided_success = self.send_command_long(
+                mavutil.mavlink.MAV_CMD_DO_SET_MODE,
+                mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,  # base_mode
+                4,  # GUIDED mode number for ArduCopter
+                0, 0, 0, 0, 0
+            )
+            
+            if not guided_success:
+                if self.signal_manager:
+                    self.signal_manager.command_response.emit("arm_takeoff", False, "Failed to switch to GUIDED mode")
+                return
+                
+            # Wait for mode change
+            time.sleep(1)
+            
+            # Step 2: Arm the vehicle
+            logging.info("TelemetryManager: Arming vehicle...")
+            arm_success = self.send_command_long(
+                mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+                1,  # arm (1) or disarm (0)
+                0   # force arm (0 = normal, 21196 = force)
+            )
+            
+            if not arm_success:
+                if self.signal_manager:
+                    self.signal_manager.command_response.emit("arm_takeoff", False, "Failed to send arm command")
+                return
+                
+            # Wait for arming to complete
+            time.sleep(2)
+            
+            # Step 3: Send takeoff command with proper parameters
+            logging.info(f"TelemetryManager: Sending takeoff command for {target_altitude}m...")
+            takeoff_success = self.send_command_long(
+                mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
+                -1,  # minimum pitch (or -1 for default)
+                0,   # empty
+                0,   # empty  
+                0,   # yaw angle (0 = use current heading)
+                0,   # latitude (0 = use current position)
+                0,   # longitude (0 = use current position)
+                target_altitude  # altitude in meters
+            )
+            
+            if takeoff_success:
+                if self.signal_manager:
+                    self.signal_manager.command_response.emit("arm_takeoff", True, f"Vehicle armed and takeoff command sent for {target_altitude}m altitude")
+                logging.info(f"TelemetryManager: Arm & takeoff sequence completed successfully")
+            else:
+                if self.signal_manager:
+                    self.signal_manager.command_response.emit("arm_takeoff", False, "Failed to send takeoff command")
+                    
+        except Exception as e:
+            logging.error(f"TelemetryManager: Error in arm & takeoff: {e}")
+            if self.signal_manager:
+                self.signal_manager.command_response.emit("arm_takeoff", False, f"Error: {str(e)}")
